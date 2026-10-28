@@ -31,13 +31,16 @@ type rankScene struct {
 	words   [4]string
 	order   []int // indices into words, most -> least visible
 	variant int   // 0 plain, 1 simul, 2 colour
+	inks    []color.NRGBA
+	panels  []float64 // panel luma per slot (simul only)
+	bg      float64
 }
 
 // rankSceneFor builds the scene deterministically from the render seed. Both
 // the token (answer) and the renderer use it, so they cannot disagree.
 func rankSceneFor(seed uint64) rankScene {
 	rng := mrand.New(mrand.NewSource(int64(seed)))
-	sc := rankScene{variant: rng.Intn(3)}
+	sc := rankScene{variant: rng.Intn(3), bg: 246}
 
 	seen := map[string]bool{}
 	for i := 0; i < 4; i++ {
@@ -50,27 +53,39 @@ func rankSceneFor(seed uint64) rankScene {
 			}
 		}
 	}
+	// The scene owns the visual parameters: the renderer draws exactly these
+	// values, so the sealed answer can never diverge from the image.
 	switch sc.variant {
-	case 0: // graded ink
-		inks := []float64{60, 110, 158, 205}
-		rng.Shuffle(4, func(i, j int) { inks[i], inks[j] = inks[j], inks[i] })
+	case 0: // graded ink: darkest = most visible
+		vals := []float64{60, 110, 158, 205}
+		rng.Shuffle(4, func(i, j int) { vals[i], vals[j] = vals[j], vals[i] })
+		sc.inks = make([]color.NRGBA, 4)
+		for i, v := range vals {
+			sc.inks[i] = gray(v)
+		}
 		sc.order = []int{0, 1, 2, 3}
-		sortByDesc(sc.order, func(i int) float64 { return -inks[i] })
-	case 1: // graded background
-		bgs := []float64{45, 100, 170, 228}
-		rng.Shuffle(4, func(i, j int) { bgs[i], bgs[j] = bgs[j], bgs[i] })
+		sortByDesc(sc.order, func(i int) float64 { return -vals[i] })
+	case 1: // graded background: strongest contrast = most visible
+		vals := []float64{45, 100, 170, 228}
+		rng.Shuffle(4, func(i, j int) { vals[i], vals[j] = vals[j], vals[i] })
+		sc.panels = vals
+		sc.inks = make([]color.NRGBA, 4)
+		for i := range sc.inks {
+			sc.inks[i] = gray(130)
+		}
 		sc.order = []int{0, 1, 2, 3}
 		sortByDesc(sc.order, func(i int) float64 {
-			d := 130 - bgs[i]
+			d := 130 - vals[i]
 			if d < 0 {
 				return -d
 			}
 			return d
 		})
 	case 2: // equal luma, different hue
-		cols := rankColors(rng)
+		sc.bg = 24
+		sc.inks = rankColors(rng)
 		sc.order = []int{0, 1, 2, 3}
-		sortByDesc(sc.order, func(i int) float64 { return float64(colorBrightnessRank(cols[i])) })
+		sortByDesc(sc.order, func(i int) float64 { return float64(colorBrightnessRank(sc.inks[i])) })
 	}
 	return sc
 }
@@ -160,53 +175,28 @@ func rankColors(rng *mrand.Rand) []color.NRGBA {
 func RenderRank(seed uint64) []byte {
 	facesOnce.Do(loadFonts)
 	sc := rankSceneFor(seed)
+	// layout RNG is separate from the scene RNG: it only jitters positions
 	rng := mrand.New(mrand.NewSource(int64(seed) ^ 0x5f3759df))
 	img := image.NewNRGBA(image.Rect(0, 0, rankW, rankH))
-	fillPix(img, gray(246))
+	fillPix(img, gray(sc.bg))
 
 	slots := rankSlots(rng)
 	f := faceFor(fontAt(1), 34) // bold, readable
 
-	var inks []color.NRGBA
-	var bgs []float64
-	switch sc.variant {
-	case 0:
-		inks = make([]color.NRGBA, 4)
-		vals := []float64{60, 110, 158, 205}
-		rng.Shuffle(4, func(i, j int) { vals[i], vals[j] = vals[j], vals[i] })
-		for i := range vals {
-			inks[i] = gray(vals[i])
-		}
-	case 1:
-		bgs = []float64{45, 100, 170, 228}
-		rng.Shuffle(4, func(i, j int) { bgs[i], bgs[j] = bgs[j], bgs[i] })
-		inks = make([]color.NRGBA, 4)
-		for i := range inks {
-			inks[i] = gray(130)
-		}
-	case 2:
-		fillPix(img, gray(24))
-		inks = rankColors(rng)
-	}
-
 	for i := range sc.words {
 		if sc.variant == 1 {
 			r := slots[i]
-			fillRect(img, image.Rect(r.Min.X-10, r.Min.Y-10, r.Max.X+10, r.Max.Y+10), gray(bgs[i]))
+			fillRect(img, image.Rect(r.Min.X-10, r.Min.Y-10, r.Max.X+10, r.Max.Y+10), gray(sc.panels[i]))
 		}
 		x := slots[i].Min.X + 8 + rng.Intn(6)
 		y := slots[i].Min.Y + 46 + rng.Intn(6)
-		drawText(img, f, sc.words[i], x, y, inks[i])
+		drawText(img, f, sc.words[i], x, y, sc.inks[i])
 	}
 	// streaks: skip on the panel variant (they would cross the panels as
 	// bright scratches); keep them relative to the scene background elsewhere
 	if sc.variant != 1 {
-		bgBase := 246.0
-		if sc.variant == 2 {
-			bgBase = 24.0
-		}
 		for i := 0; i < 6; i++ {
-			streakPx(img, rng, bgBase)
+			streakPx(img, rng, sc.bg)
 		}
 	}
 	var buf bytes.Buffer

@@ -199,8 +199,7 @@ const challengeHTML = `<!doctype html>
 <p>Which vertical line <strong>looks longer</strong>? Type <code>l</code> or <code>r</code>.
 They are exactly the same length - trust your eyes, not a ruler.</p>
 {{else if eq .Kind "rank"}}
-<p>Type the four words in order, <strong>most visible first</strong>.
-Can't decide? Just <a href="?r={{.R}}">get a different challenge</a>.</p>
+<p>Type the four words in order, <strong>most visible first</strong>.</p>
 {{else}}
 <p>Type the <strong>word</strong> below to open the gate.</p>
 {{end}}
@@ -213,6 +212,7 @@ Can't decide? Just <a href="?r={{.R}}">get a different challenge</a>.</p>
  spellcheck="false" placeholder="{{if eq .Kind "illusion"}}l or r{{else if eq .Kind "rank"}}four words, most visible first{{else}}the word{{end}}" required autofocus>
 <button type="submit">Pass</button>
 </form>
+<p class="note"><a href="?r={{.R}}">get a different challenge</a></p>
 {{if .Mail}}<p class="note">Locked out of something you own? Write to {{.Mail}}.</p>{{end}}
 </main></body></html>`
 
