@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 )
 
 func f64(v float64) *float64 { return &v }
@@ -124,5 +126,17 @@ func TestScoreSink(t *testing.T) {
 	}
 	if !strings.Contains(lines[0], `"token":"abc12345"`) || !strings.Contains(lines[1], `"kind":"none"`) {
 		t.Fatalf("unexpected records: %q", lines)
+	}
+}
+
+func TestScoreLogSubdirective(t *testing.T) {
+	src := "tsnp {\n secret test\n score_log /tmp/x.jsonl\n}"
+	var a App
+	d := caddyfile.NewTestDispenser(src)
+	if err := a.UnmarshalCaddyfile(d); err != nil {
+		t.Fatalf("score_log not parsed: %v", err)
+	}
+	if a.ScoreLog != "/tmp/x.jsonl" {
+		t.Fatalf("score_log = %q", a.ScoreLog)
 	}
 }

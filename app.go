@@ -126,7 +126,7 @@ func (a *App) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	for nesting := d.Nesting(); d.NextBlock(nesting); {
 		opt := d.Val()
 		switch opt {
-		case "secret", "secret_env", "cookie_name", "title", "mail":
+		case "secret", "secret_env", "cookie_name", "score_log", "title", "mail":
 			if !d.NextArg() {
 				return d.ArgErr()
 			}
@@ -137,6 +137,8 @@ func (a *App) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				a.SecretEnv = d.Val()
 			case "cookie_name":
 				a.CookieName = d.Val()
+			case "score_log":
+				a.ScoreLog = d.Val()
 			case "title":
 				a.Title = d.Val()
 			case "mail":
