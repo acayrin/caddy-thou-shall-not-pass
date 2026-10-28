@@ -232,11 +232,7 @@ func drawTrueWord(img *image.NRGBA, rng *mrand.Rand, word string) {
 	}
 }
 
-// streak draws a low-contrast line (Bresenham) over everything.
-func streak(img *image.NRGBA, rng *mrand.Rand) {
-	x0, y0 := rng.Intn(imgW), rng.Intn(imgH)
-	x1, y1 := rng.Intn(imgW), rng.Intn(imgH)
-	c := lowDelta(rng, 6)
+func drawLine(img *image.NRGBA, x0, y0, x1, y1 int, c color.Color) {
 	dx, dy := abs(x1-x0), -abs(y1-y0)
 	sx, sy := 1, 1
 	if x0 >= x1 {
@@ -248,7 +244,7 @@ func streak(img *image.NRGBA, rng *mrand.Rand) {
 	err := dx + dy
 	for {
 		if x0 >= 0 && x0 < imgW && y0 >= 0 && y0 < imgH {
-			img.SetNRGBA(x0, y0, c)
+			img.Set(x0, y0, c)
 		}
 		if x0 == x1 && y0 == y1 {
 			return
@@ -270,4 +266,68 @@ func abs(v int) int {
 		return -v
 	}
 	return v
+}
+
+// streak draws a low-contrast random line over everything.
+func streak(img *image.NRGBA, rng *mrand.Rand) {
+	drawLine(img,
+		rng.Intn(imgW), rng.Intn(imgH),
+		rng.Intn(imgW), rng.Intn(imgH),
+		lowDelta(rng, 6))
+}
+
+// RenderIllusion draws a Muller-Lyer challenge: two exactly equal-length
+// vertical lines, one with outward fins (the side humans perceive as longer),
+// the other with inward fins. A pixel-measuring model sees equality; the
+// answer side is sealed in the token (l/r).
+func RenderIllusion(seed uint64) []byte {
+	facesOnce.Do(loadFonts)
+	rng := mrand.New(mrand.NewSource(int64(seed)))
+	img := image.NewNRGBA(image.Rect(0, 0, imgW, imgH))
+
+	for y := 0; y < imgH; y++ {
+		for x := 0; x < imgW; x++ {
+			d := rng.Intn(7) - 3
+			img.SetNRGBA(x, y, color.NRGBA{R: ch(bgR + d), G: ch(bgG + d), B: ch(bgB + d), A: 255})
+		}
+	}
+
+	cx := imgW / 2
+	top, bot := 36+rng.Intn(8), imgH-36-rng.Intn(8)
+	sep := 66 + rng.Intn(14)
+	lx, rx := cx-sep, cx+sep
+	ink := color.NRGBA{R: 30, G: 28, B: 24, A: 255}
+
+	answerLeft := rng.Intn(2) == 0
+	drawMuller(img, lx, top, bot, answerLeft, ink, rng)
+	drawMuller(img, rx, top, bot, !answerLeft, ink, rng)
+
+	for i := 0; i < 8; i++ {
+		streak(img, rng)
+	}
+	for i := 0; i < 160; i++ {
+		img.SetNRGBA(rng.Intn(imgW), rng.Intn(imgH), lowDelta(rng, 10))
+	}
+
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, img)
+	return buf.Bytes()
+}
+
+// drawMuller: vertical line with fins. outward=true flares the fins away from
+// the shaft at both ends (Muller-Lyer: perceived longer); outward=false turns
+// them inwards (perceived shorter). Both shafts are exactly bot-top long.
+func drawMuller(img *image.NRGBA, x, top, bot int, outward bool, c color.Color, rng *mrand.Rand) {
+	fx := 14 + rng.Intn(6)
+	fy := 25 + rng.Intn(6)
+	drawLine(img, x, top, x, bot, c)
+	drawLine(img, x+1, top, x+1, bot, c)
+	dirTop, dirBot := -1, 1 // default outward
+	if !outward {
+		dirTop, dirBot = 1, -1
+	}
+	drawLine(img, x, top, x-fx, top+dirTop*fy, c)
+	drawLine(img, x, top, x+fx, top+dirTop*fy, c)
+	drawLine(img, x, bot, x-fx, bot+dirBot*fy, c)
+	drawLine(img, x, bot, x+fx, bot+dirBot*fy, c)
 }

@@ -21,21 +21,21 @@ func testApp(t *testing.T) *App {
 
 func TestChallengeRoundTrip(t *testing.T) {
 	a := testApp(t)
-	word, token, err := a.NewChallenge()
+	kind, word, token, err := a.NewChallenge()
 	if err != nil {
 		t.Fatal(err)
 	}
-	word2, seed, ok := a.OpenChallenge(token)
-	if !ok || word2 != word {
-		t.Fatalf("open failed: ok=%v word=%q want %q", ok, word2, word)
+	k2, word2, seed, ok := a.OpenChallenge(token)
+	if !ok || word2 != word || k2 != kind {
+		t.Fatalf("open failed: ok=%v kind=%c answer=%q want %c/%q", ok, k2, word2, kind, word)
 	}
-	_, seed2, _ := a.OpenChallenge(token)
+	_, _, seed2, _ := a.OpenChallenge(token)
 	if seed != seed2 {
 		t.Fatal("seed not deterministic for same token")
 	}
 	// tampered ciphertext
 	bad := token[:len(token)-4] + strings.Repeat("A", 4)
-	if _, _, ok := a.OpenChallenge(bad); ok {
+	if _, _, _, ok := a.OpenChallenge(bad); ok {
 		t.Fatal("tampered token accepted")
 	}
 	// wrong app secret
@@ -43,7 +43,7 @@ func TestChallengeRoundTrip(t *testing.T) {
 	if err := b.provision(); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok := b.OpenChallenge(token); ok {
+	if _, _, _, ok := b.OpenChallenge(token); ok {
 		t.Fatal("token from other key accepted")
 	}
 	// expired
@@ -51,16 +51,16 @@ func TestChallengeRoundTrip(t *testing.T) {
 	if err := c.provision(); err != nil {
 		t.Fatal(err)
 	}
-	_, tokExp, err := c.NewChallenge()
+	_, _, tokExp, err := c.NewChallenge()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok := c.OpenChallenge(tokExp); ok {
+	if _, _, _, ok := c.OpenChallenge(tokExp); ok {
 		t.Fatal("expired token accepted")
 	}
 	// malformed inputs
 	for _, s := range []string{"", "!!!", "AAAA"} {
-		if _, _, ok := a.OpenChallenge(s); ok {
+		if _, _, _, ok := a.OpenChallenge(s); ok {
 			t.Fatalf("garbage %q accepted", s)
 		}
 	}

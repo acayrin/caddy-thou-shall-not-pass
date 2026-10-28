@@ -7,6 +7,19 @@ sustained scraping economically expensive.
 
 ## How it works
 
+Two challenge types rotate randomly per challenge, so a solver must implement
+both:
+
+1. **Word**: one dark word rendered with overlapping, jittered bold glyphs and
+   cut-out specks, plus N faint decoy words in a luminance +/-3..6 band (same
+   bold face, same overlap treatment as the true word, so shape/weight leak
+   nothing). OCR pipelines die on the overlap; VLMs read the decoys too but
+   must still pick the right one.
+2. **Müller-Lyer illusion**: two exactly equal vertical lines, one with
+   outward fins (perceived longer by humans) and one with inward fins. The
+   answer is the perceived-longer side (l/r) - a pixel-measuring model sees
+   equality, and a "read the text" OCR stack sees no text at all.
+
 - Gated requests without a valid pass cookie get a 302 to a challenge page:
   one PNG plus a plain HTML form (no JS needed to solve or submit).
 - The PNG shows **one bold true word** over a noise underlay; hidden in the

@@ -59,10 +59,17 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 		return nil
 
 	case "/c.png":
-		word, seed, ok := a.OpenChallenge(r.URL.Query().Get("d"))
+		kind, answer, seed, ok := a.OpenChallenge(r.URL.Query().Get("d"))
 		if !ok {
 			http.Error(w, "invalid or expired challenge", http.StatusBadRequest)
 			return nil
+		}
+		var png []byte
+		switch kind {
+		case KindIllusion:
+			png = RenderIllusion(seed)
+		default:
+			png = Render(seed, answer, a.Decoys)
 		}
 		h := w.Header()
 		h.Set("Content-Type", "image/png")
@@ -70,7 +77,7 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 		// destroy the ghost-pixel layer.
 		h.Set("Cache-Control", "no-store, max-age=0")
 		h.Set("X-Content-Type-Options", "nosniff")
-		_, err := w.Write(Render(seed, word, a.Decoys))
+		_, err := w.Write(png)
 		_ = err
 		return nil
 
@@ -85,20 +92,32 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 		}
 		d := r.FormValue("d")
 		answer := strings.ToLower(strings.TrimSpace(r.FormValue("a")))
-		word, _, valid := a.OpenChallenge(d)
+		kind, expected, _, valid := a.OpenChallenge(d)
+		if kind == KindIllusion {
+			switch answer {
+			case "left":
+				answer = "l"
+			case "right":
+				answer = "r"
+			}
+		}
 		route := cleanRedirect(r.FormValue("r"))
 		switch {
 		case !valid:
 			// expired/tampered token: fresh challenge, no strike against the
 			// client (a slow human and a bot look identical here).
 			serveChallenge(w, a, route, "That challenge expired - here's a new one.", false)
-		case answer != word:
+		case answer != expected:
 			blocked := a.store.Add(key)
 			if blocked {
 				serveBlockPage(w, a)
 				return nil
 			}
-			serveChallenge(w, a, route, "Nope - that's not the bold word.", true)
+			note := "Nope - that's not the bold word."
+			if kind == KindIllusion {
+				note = "Nope - answer with the side that LOOKS longer: l or r."
+			}
+			serveChallenge(w, a, route, note, true)
 		default:
 			a.store.Clear(key)
 			id := make([]byte, 4)
@@ -149,13 +168,14 @@ h1{font-size:1.5rem;margin:1rem 0 .3rem}
 `
 
 type pageData struct {
-	Title   string
-	Note    string
-	Token   string
-	R       string
-	Mail    string
-	Fail    bool
-	Blocked bool
+	Title    string
+	Note     string
+	Token    string
+	R        string
+	Mail     string
+	Fail     bool
+	Blocked  bool
+	Illusion bool
 }
 
 var challengeTpl = template.Must(template.New("challenge").Parse(challengeHTML))
@@ -170,15 +190,20 @@ const challengeHTML = `<!doctype html>
 <body><main>
 <img class="cat" src="https://static.acay.cc/imgs/zenacat_question.png" alt="Zena the gatekeeper cat" width="160">
 <h1>{{.Title}}</h1>
+{{if .Illusion}}
+<p>Which vertical line <strong>looks longer</strong>? Type <code>l</code> or <code>r</code>.
+They are exactly the same length - trust your eyes, not a ruler.</p>
+{{else}}
 <p>Type the <strong>bold word</strong> below to open the gate.
 The faint shapes are for the machines; your eyes are supposed to ignore them.</p>
+{{end}}
 {{if .Note}}<p class="bad">{{.Note}}</p>{{end}}
 <form method="post" action="solve">
 <input type="hidden" name="d" value="{{.Token}}">
 <input type="hidden" name="r" value="{{.R}}">
-<img class="challenge" src="c.png?d={{.Token}}" width="420" height="132" alt="captcha challenge image">
+<img class="challenge" src="c.png?d={{.Token}}" width="480" height="150" alt="captcha challenge image">
 <input type="text" name="a" autocomplete="off" autocapitalize="none" autocorrect="off"
- spellcheck="false" placeholder="the bold word" required autofocus>
+ spellcheck="false" placeholder="{{if .Illusion}}l or r{{else}}the bold word{{end}}" required autofocus>
 <button type="submit">Pass</button>
 </form>
 {{if .Mail}}<p class="note">Locked out of something you own? Write to {{.Mail}}.</p>{{end}}
@@ -198,18 +223,19 @@ The gate is shut for a while. Come back later - or from somewhere else.</p>
 </main></body></html>`
 
 func serveChallenge(w http.ResponseWriter, a *App, route, note string, fail bool) {
-	_, token, err := a.NewChallenge()
+	kind, _, token, err := a.NewChallenge()
 	if err != nil {
 		http.Error(w, "challenge generation failed", http.StatusInternalServerError)
 		return
 	}
 	d := pageData{
-		Title: a.Title,
-		Note:  note,
-		Token: token,
-		R:     route,
-		Mail:  a.Mail,
-		Fail:  fail,
+		Title:    a.Title,
+		Note:     note,
+		Token:    token,
+		Illusion: kind == KindIllusion,
+		R:        route,
+		Mail:     a.Mail,
+		Fail:     fail,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

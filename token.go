@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	mrand "math/rand"
 )
 
 // ---- challenge tokens (stateless) ----
@@ -30,46 +32,68 @@ func (a *App) aead() (cipher.AEAD, error) {
 	return cipher.NewGCM(block)
 }
 
-// NewChallenge returns (word, token).
-func (a *App) NewChallenge() (string, string, error) {
-	word := pickWord()
+// Challenge kinds sealed in the token.
+const (
+	KindWord     = 'w' // answer: the bold word
+	KindIllusion = 'i' // answer: "l" or "r" (Muller-Lyer perceived-longer side)
+)
+
+// NewChallenge returns (kind, answer, token). Kind rotates randomly per
+// challenge so generic OCR/"read the text" solver stacks fail outright on
+// the illusion half.
+func (a *App) NewChallenge() (kind byte, answer, token string, err error) {
+	if mrand.Intn(2) == 0 {
+		kind, answer = KindWord, pickWord()
+	} else {
+		kind = KindIllusion
+		if mrand.Intn(2) == 0 {
+			answer = "l"
+		} else {
+			answer = "r"
+		}
+	}
 	nonce := make([]byte, 12)
-	if _, err := rand.Read(nonce); err != nil {
-		return "", "", err
+	if _, err = rand.Read(nonce); err != nil {
+		return 0, "", "", err
 	}
 	exp := uint64(time.Now().Add(time.Duration(a.ChallengeTTL)).Unix())
-	pt := make([]byte, 8, 8+len(word))
+	pt := make([]byte, 9, 9+len(answer))
 	binary.BigEndian.PutUint64(pt, exp)
-	pt = append(pt, word...)
+	pt[8] = kind
+	pt = append(pt, answer...)
 	gcm, err := a.aead()
 	if err != nil {
-		return "", "", err
+		return 0, "", "", err
 	}
 	blob := gcm.Seal(nonce, nonce, pt, nil)
-	return word, base64.RawURLEncoding.EncodeToString(blob), nil
+	return kind, answer, base64.RawURLEncoding.EncodeToString(blob), nil
 }
 
-// OpenChallenge decrypts and checks expiry; returns the word and the render
-// seed. Tampered/expired tokens yield ok=false.
-func (a *App) OpenChallenge(token string) (word string, seed uint64, ok bool) {
+// OpenChallenge decrypts and checks expiry; returns kind, answer and the
+// render seed. Tampered/expired tokens yield ok=false.
+func (a *App) OpenChallenge(token string) (kind byte, answer string, seed uint64, ok bool) {
 	blob, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil || len(blob) < 12+12+9 {
-		return "", 0, false
+	if err != nil || len(blob) < 12+12+10 {
+		return 0, "", 0, false
 	}
 	gcm, err := a.aead()
 	if err != nil {
-		return "", 0, false
+		return 0, "", 0, false
 	}
 	pt, err := gcm.Open(nil, blob[:12], blob[12:], nil)
-	if err != nil || len(pt) < 9 {
-		return "", 0, false
+	if err != nil || len(pt) < 10 {
+		return 0, "", 0, false
 	}
 	exp := binary.BigEndian.Uint64(pt[:8])
 	if time.Now().Unix() > int64(exp) {
-		return "", 0, false
+		return 0, "", 0, false
+	}
+	kind = pt[8]
+	if kind != KindWord && kind != KindIllusion {
+		return 0, "", 0, false
 	}
 	sum := sha256.Sum256(blob)
-	return string(pt[8:]), binary.BigEndian.Uint64(sum[:8]), true
+	return kind, string(pt[9:]), binary.BigEndian.Uint64(sum[:8]), true
 }
 
 // ---- pass cookies (stateless, bounded budget) ----

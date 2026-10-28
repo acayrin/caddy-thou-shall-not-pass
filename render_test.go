@@ -63,3 +63,35 @@ func TestNoSecretMeansNoKeys(t *testing.T) {
 		t.Fatal("missing secret accepted")
 	}
 }
+
+func TestIllusionRender(t *testing.T) {
+	b1 := RenderIllusion(42)
+	if !bytes.Equal(b1, RenderIllusion(42)) {
+		t.Fatal("illusion render not deterministic")
+	}
+	if bytes.Equal(b1, RenderIllusion(43)) {
+		t.Fatal("different seeds produced identical illusion image")
+	}
+	img, err := png.Decode(bytes.NewReader(b1))
+	if err != nil {
+		t.Fatalf("png decode: %v", err)
+	}
+	if b := img.Bounds(); b.Dx() != imgW || b.Dy() != imgH {
+		t.Fatalf("unexpected size %v", b)
+	}
+}
+
+func TestChallengeKindsRotate(t *testing.T) {
+	a := testApp(t)
+	seen := map[byte]bool{}
+	for i := 0; i < 64 && len(seen) < 2; i++ {
+		k, _, _, err := a.NewChallenge()
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen[k] = true
+	}
+	if !seen[KindWord] || !seen[KindIllusion] {
+		t.Fatalf("kinds not rotating: %v", seen)
+	}
+}

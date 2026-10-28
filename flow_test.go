@@ -43,7 +43,7 @@ func TestFullFlow(t *testing.T) {
 	}
 
 	// 2. PNG renders and decodes for a fresh token
-	_, tok, err := a.NewChallenge()
+	_, _, tok, err := a.NewChallenge()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,12 +65,15 @@ func TestFullFlow(t *testing.T) {
 	if err := e.ServeHTTP(rec, r, nil); err != nil {
 		t.Fatal(err)
 	}
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "not the bold word") {
+	if rec.Code != http.StatusOK ||
+		(!strings.Contains(rec.Body.String(), "not the bold word") &&
+			!strings.Contains(rec.Body.String(), "LOOKS longer")) {
 		t.Fatalf("wrong-answer flow: code %d", rec.Code)
 	}
 
 	// 4. correct answer (case-insensitive) -> 303 + pass cookie
-	word, tok, err := a.NewChallenge()
+	kind, word, tok, err := a.NewChallenge()
+	_ = kind
 	if err != nil {
 		t.Fatal(err)
 	}
