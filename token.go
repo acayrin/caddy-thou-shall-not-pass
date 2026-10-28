@@ -42,19 +42,17 @@ const (
 // challenge so generic OCR/"read the text" solver stacks fail outright on
 // the illusion half.
 func (a *App) NewChallenge() (kind byte, answer, token string, err error) {
+	nonce := make([]byte, 12)
+	if _, err = rand.Read(nonce); err != nil {
+		return 0, "", "", err
+	}
+	// the render seed comes from the nonce, so the illusion side (and with it
+	// the sealed answer) must be derived from the same seed the renderer uses
 	if mrand.Intn(2) == 0 {
 		kind, answer = KindWord, pickWord()
 	} else {
 		kind = KindIllusion
-		if mrand.Intn(2) == 0 {
-			answer = "l"
-		} else {
-			answer = "r"
-		}
-	}
-	nonce := make([]byte, 12)
-	if _, err = rand.Read(nonce); err != nil {
-		return 0, "", "", err
+		answer = IllusionAnswer(nonceSeed(nonce))
 	}
 	exp := uint64(time.Now().Add(time.Duration(a.ChallengeTTL)).Unix())
 	pt := make([]byte, 9, 9+len(answer))
@@ -92,8 +90,22 @@ func (a *App) OpenChallenge(token string) (kind byte, answer string, seed uint64
 	if kind != KindWord && kind != KindIllusion {
 		return 0, "", 0, false
 	}
-	sum := sha256.Sum256(blob)
-	return kind, string(pt[9:]), binary.BigEndian.Uint64(sum[:8]), true
+	return kind, string(pt[9:]), nonceSeed(blob[:12]), true
+}
+
+// nonceSeed derives the deterministic render seed.
+func nonceSeed(nonce []byte) uint64 {
+	sum := sha256.Sum256(nonce)
+	return binary.BigEndian.Uint64(sum[:8])
+}
+
+// IllusionAnswer is the side humans perceive as longer for a given seed:
+// "l" when the left line carries the outward fins.
+func IllusionAnswer(seed uint64) string {
+	if seed%2 == 0 {
+		return "l"
+	}
+	return "r"
 }
 
 // ---- pass cookies (stateless, bounded budget) ----

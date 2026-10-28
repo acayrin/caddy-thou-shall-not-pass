@@ -95,3 +95,29 @@ func TestChallengeKindsRotate(t *testing.T) {
 		t.Fatalf("kinds not rotating: %v", seen)
 	}
 }
+
+func TestIllusionAnswerMatchesRender(t *testing.T) {
+	a := testApp(t)
+	checked := 0
+	for i := 0; i < 300 && checked < 20; i++ {
+		kind, ans, tok, err := a.NewChallenge()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if kind != KindIllusion {
+			continue
+		}
+		k, ans2, seed, ok := a.OpenChallenge(tok)
+		if !ok || k != KindIllusion || ans2 != ans {
+			t.Fatalf("token mismatch: ok=%v kind=%c ans=%q sealed=%q", ok, k, ans2, ans)
+		}
+		// the renderer decides the outward-fin side from the same seed
+		if IllusionAnswer(seed) != ans {
+			t.Fatalf("render side %q != sealed answer %q", IllusionAnswer(seed), ans)
+		}
+		checked++
+	}
+	if checked < 20 {
+		t.Fatalf("only %d illusion tokens generated", checked)
+	}
+}

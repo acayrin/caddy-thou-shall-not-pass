@@ -298,7 +298,7 @@ func RenderIllusion(seed uint64) []byte {
 	lx, rx := cx-sep, cx+sep
 	ink := color.NRGBA{R: 30, G: 28, B: 24, A: 255}
 
-	answerLeft := rng.Intn(2) == 0
+	answerLeft := IllusionAnswer(seed) == "l"
 	drawMuller(img, lx, top, bot, answerLeft, ink, rng)
 	drawMuller(img, rx, top, bot, !answerLeft, ink, rng)
 
