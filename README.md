@@ -96,6 +96,24 @@ Non-browser clients (git smart-HTTP, webdav, APIs, ACME, feed readers)
 cannot type into a picture; exempt them with extra `not path ...` matchers
 in your `@tsnp` block.
 
+## Behavioural scoring (shadow mode, v0.7.0)
+
+The challenge page loads a small `app.js` (embedded, ~5 KB, no framework) that
+collects kinematic features while the visitor solves the image: time to first
+move, move count, path efficiency, velocity peak/p95, acceleration sign
+changes, coalesced pointer events, pressure presence, typing dwell/flight,
+edits, paste, click duration, visibility changes and page dwell. It posts them
+as a hidden `f` field with the form.
+
+The server validates the vector for physical plausibility (path efficiency
+<= 1, achievable velocities, monotone timings) and computes a 0..1 score,
+which is currently **logged only** (`tsnp behaviour` in the caddy journal).
+No identifiers, no storage, no device fingerprint; the log carries an
+irreversible 8-hex tag of the challenge token.
+
+No JS is served on any other page, including the block page. Missing payloads
+score neutral (0.5) and never count as evidence.
+
 ## Endpoints
 
 ```

@@ -2,6 +2,7 @@ package tsnp
 
 import (
 	"crypto/rand"
+	_ "embed"
 	"encoding/hex"
 	"html/template"
 	"net/http"
@@ -14,13 +15,18 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"go.uber.org/zap"
 )
+
+//go:embed web/app.js
+var appJS []byte
 
 // Endpoint is the `tsnp_endpoint` handler mounted under the base URL; it
 // serves the challenge page, the PNG, and the (plain HTML form, no-JS)
 // solve POST. Paths are relative because handle_path strips the base.
 type Endpoint struct {
 	app *App
+	log *zap.Logger
 }
 
 func (Endpoint) CaddyModule() caddy.ModuleInfo {
@@ -41,6 +47,7 @@ func (e *Endpoint) Provision(ctx caddy.Context) error {
 		return err
 	}
 	e.app = a
+	e.log = ctx.Logger()
 	return nil
 }
 
@@ -92,6 +99,14 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 		_ = err
 		return nil
 
+	case "/app.js":
+		h := w.Header()
+		h.Set("Content-Type", "text/javascript; charset=utf-8")
+		h.Set("Cache-Control", "public, max-age=3600")
+		h.Set("X-Content-Type-Options", "nosniff")
+		_, _ = w.Write(appJS)
+		return nil
+
 	case "/solve":
 		if r.Method != http.MethodPost {
 			// stale bookmark / in-flight page: back to a fresh challenge.
@@ -105,6 +120,19 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 			return nil
 		}
 		d := r.FormValue("d")
+		// behavioural score: shadow mode only (logged, never enforced)
+		if e.log != nil {
+			if p, ok := decodeFeats(r.FormValue("f")); ok {
+				e.log.Info("tsnp behaviour",
+					zap.String("token", tokenTag(p.Token)),
+					zap.Float64("score", score(p.F)),
+					zap.Int("moves", p.F.NMoves),
+					zap.Float64("path_eff", p.F.PathEff),
+					zap.Bool("webdriver", p.F.Webdriver))
+			} else {
+				e.log.Info("tsnp behaviour", zap.String("token", tokenTag(d)), zap.String("payload", "none"))
+			}
+		}
 		answer := normalizeAnswer(r.FormValue("a"))
 		kind, expected, _, valid := a.OpenChallenge(d)
 		if kind == KindIllusion {
@@ -215,6 +243,7 @@ this page. Which branch does the trolley take - a or b?</p>
 <form method="post" action="solve">
 <input type="hidden" name="d" value="{{.Token}}">
 <input type="hidden" name="r" value="{{.R}}">
+<input type="hidden" name="f" value="">
 <img class="challenge" src="c.png?d={{.Token}}" width="480" height="{{if eq .Kind "moral"}}170{{else}}150{{end}}" alt="captcha challenge image">
 <input type="text" name="a" autocomplete="off" autocapitalize="none" autocorrect="off"
  spellcheck="false" placeholder="{{if eq .Kind "illusion"}}l or r{{else if eq .Kind "moral"}}a or b{{else}}the word{{end}}" required autofocus>
@@ -222,7 +251,7 @@ this page. Which branch does the trolley take - a or b?</p>
 </form>
 <p class="note"><a href="?r={{.R}}">get a different challenge</a></p>
 {{if .Mail}}<p class="note">in case something does break - please leave a message at {{.Mail}}</p>{{end}}
-</main></body></html>`
+</main><script src="app.js" defer></script></body></html>`
 
 const blockHTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
