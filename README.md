@@ -19,8 +19,8 @@ Three challenge types rotate randomly per challenge (50% word, 35% rank,
    render style does not transfer. OCR pipelines die on the overlap; VLMs read
    the decoys too but must still pick the dark one.
 2. **Rank (stall type)**: four different words, order them most->least
-   visible. Three sub-variants rotate: graded ink, graded background panels,
-   and equal-luma colours (which defeat pixel-luma measurement). This is not
+   visible. Two sub-variants rotate: graded background panels, and equal-luma
+   colours (which defeat pixel-luma measurement). This is not
    meant to be a hard gate - a human who cannot rank simply reloads for a
    fresh challenge (the page offers a "get a different challenge" link). Its
    job is to make text pipelines fail and to waste solver time: the words

@@ -40,8 +40,8 @@ func TestRankVariantsRotate(t *testing.T) {
 	for seed := uint64(0); seed < 200; seed++ {
 		seen[rankSceneFor(seed).variant] = true
 	}
-	if len(seen) != 3 {
-		t.Fatalf("expected 3 rank variants, saw %v", seen)
+	if len(seen) != 2 {
+		t.Fatalf("expected 2 rank variants, saw %v", seen)
 	}
 }
 
@@ -137,8 +137,6 @@ func TestRankAnswerMatchesRenderedImage(t *testing.T) {
 				}
 			}
 			switch sc.variant {
-			case 0:
-				score[i] = -lo // darkest ink = most visible
 			case 1:
 				score[i] = math.Abs(130 - mode)
 			case 2:

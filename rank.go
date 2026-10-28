@@ -40,7 +40,10 @@ type rankScene struct {
 // the token (answer) and the renderer use it, so they cannot disagree.
 func rankSceneFor(seed uint64) rankScene {
 	rng := mrand.New(mrand.NewSource(int64(seed)))
-	sc := rankScene{variant: rng.Intn(3), bg: 246}
+	// variant 1: graded background panels, 2: equal-luma colours.
+	// (the former "graded ink" variant was removed: it is pure grey-diff,
+	// readable by any model and by a five-line script)
+	sc := rankScene{variant: 1 + rng.Intn(2), bg: 246}
 
 	seen := map[string]bool{}
 	for i := 0; i < 4; i++ {
@@ -56,15 +59,6 @@ func rankSceneFor(seed uint64) rankScene {
 	// The scene owns the visual parameters: the renderer draws exactly these
 	// values, so the sealed answer can never diverge from the image.
 	switch sc.variant {
-	case 0: // graded ink: darkest = most visible
-		vals := []float64{60, 110, 158, 205}
-		rng.Shuffle(4, func(i, j int) { vals[i], vals[j] = vals[j], vals[i] })
-		sc.inks = make([]color.NRGBA, 4)
-		for i, v := range vals {
-			sc.inks[i] = gray(v)
-		}
-		sc.order = []int{0, 1, 2, 3}
-		sortByDesc(sc.order, func(i int) float64 { return -vals[i] })
 	case 1: // graded background: strongest contrast = most visible
 		vals := []float64{45, 100, 170, 228}
 		rng.Shuffle(4, func(i, j int) { vals[i], vals[j] = vals[j], vals[i] })
