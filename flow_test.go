@@ -66,7 +66,7 @@ func TestFullFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	if rec.Code != http.StatusOK ||
-		(!strings.Contains(rec.Body.String(), "not the dark word") &&
+		(!strings.Contains(rec.Body.String(), "not the word") &&
 			!strings.Contains(rec.Body.String(), "LOOKS longer")) {
 		t.Fatalf("wrong-answer flow: code %d", rec.Code)
 	}

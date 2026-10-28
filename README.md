@@ -7,8 +7,8 @@ sustained scraping economically expensive.
 
 ## How it works
 
-Two challenge types rotate randomly per challenge, so a solver must implement
-both:
+Three challenge types rotate randomly per challenge (50% word, 35% rank,
+15% illusion), so a solver must implement all of them:
 
 1. **Word**: one dark word rendered with overlapping, baseline-jittered,
    wave-distorted glyphs and cut-out specks, plus N faint decoy words in a
@@ -18,7 +18,15 @@ both:
    profile, so style never identifies the real word and a solver tuned on one
    render style does not transfer. OCR pipelines die on the overlap; VLMs read
    the decoys too but must still pick the dark one.
-2. **Müller-Lyer illusion**: two exactly equal vertical lines, one with
+2. **Rank (stall type)**: four different words, order them most->least
+   visible. Three sub-variants rotate: graded ink, graded background panels,
+   and equal-luma colours (which defeat pixel-luma measurement). This is not
+   meant to be a hard gate - a human who cannot rank simply reloads for a
+   fresh challenge (the page offers a "get a different challenge" link). Its
+   job is to make text pipelines fail and to waste solver time: the words
+   must be OCR'd, then ordered, and the ordering is 24-way.
+
+3. **Müller-Lyer illusion**: two exactly equal vertical lines, one with
    outward fins (perceived longer by humans) and one with inward fins. The
    answer is the perceived-longer side (l/r) - a pixel-measuring model sees
    equality, and a "read the text" OCR stack sees no text at all.

@@ -34,8 +34,9 @@ func (a *App) aead() (cipher.AEAD, error) {
 
 // Challenge kinds sealed in the token.
 const (
-	KindWord     = 'w' // answer: the dark word
+	KindWord     = 'w' // answer: the word
 	KindIllusion = 'i' // answer: "l" or "r" (Muller-Lyer perceived-longer side)
+	KindRank     = 'r' // answer: four words, most -> least visible
 )
 
 // NewChallenge returns (kind, answer, token). Kind rotates randomly per
@@ -48,9 +49,13 @@ func (a *App) NewChallenge() (kind byte, answer, token string, err error) {
 	}
 	// the render seed comes from the nonce, so the illusion side (and with it
 	// the sealed answer) must be derived from the same seed the renderer uses
-	if mrand.Intn(2) == 0 {
+	switch roll := mrand.Intn(100); {
+	case roll < 50:
 		kind, answer = KindWord, pickWord()
-	} else {
+	case roll < 85:
+		kind = KindRank
+		answer = rankSceneFor(nonceSeed(nonce)).answer()
+	default:
 		kind = KindIllusion
 		answer = IllusionAnswer(nonceSeed(nonce))
 	}
@@ -87,7 +92,7 @@ func (a *App) OpenChallenge(token string) (kind byte, answer string, seed uint64
 		return 0, "", 0, false
 	}
 	kind = pt[8]
-	if kind != KindWord && kind != KindIllusion {
+	if kind != KindWord && kind != KindIllusion && kind != KindRank {
 		return 0, "", 0, false
 	}
 	return kind, string(pt[9:]), nonceSeed(blob[:12]), true

@@ -68,6 +68,8 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 		switch kind {
 		case KindIllusion:
 			png = RenderIllusion(seed)
+		case KindRank:
+			png = RenderRank(seed)
 		default:
 			png = Render(seed, answer, a.Decoys)
 		}
@@ -91,7 +93,7 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 			return nil
 		}
 		d := r.FormValue("d")
-		answer := strings.ToLower(strings.TrimSpace(r.FormValue("a")))
+		answer := normalizeAnswer(r.FormValue("a"))
 		kind, expected, _, valid := a.OpenChallenge(d)
 		if kind == KindIllusion {
 			switch answer {
@@ -113,9 +115,12 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 				serveBlockPage(w, a)
 				return nil
 			}
-			note := "Nope - that's not the dark word."
-			if kind == KindIllusion {
+			note := "Nope - that's not the word."
+			switch kind {
+			case KindIllusion:
 				note = "Nope - answer with the side that LOOKS longer: l or r."
+			case KindRank:
+				note = "Nope - four words, most visible first. Or skip this challenge."
 			}
 			serveChallenge(w, a, route, note, true)
 		default:
@@ -168,14 +173,14 @@ h1{font-size:1.5rem;margin:1rem 0 .3rem}
 `
 
 type pageData struct {
-	Title    string
-	Note     string
-	Token    string
-	R        string
-	Mail     string
-	Fail     bool
-	Blocked  bool
-	Illusion bool
+	Title   string
+	Note    string
+	Token   string
+	R       string
+	Mail    string
+	Fail    bool
+	Blocked bool
+	Kind    string // "word" | "illusion" | "rank"
 }
 
 var challengeTpl = template.Must(template.New("challenge").Parse(challengeHTML))
@@ -190,20 +195,22 @@ const challengeHTML = `<!doctype html>
 <body><main>
 <img class="cat" src="https://static.acay.cc/imgs/zenacat_question.png" alt="Zena the gatekeeper cat" width="160">
 <h1>{{.Title}}</h1>
-{{if .Illusion}}
+{{if eq .Kind "illusion"}}
 <p>Which vertical line <strong>looks longer</strong>? Type <code>l</code> or <code>r</code>.
 They are exactly the same length - trust your eyes, not a ruler.</p>
+{{else if eq .Kind "rank"}}
+<p>Type the four words in order, <strong>most visible first</strong>.
+Can't decide? Just <a href="?r={{.R}}">get a different challenge</a>.</p>
 {{else}}
-<p>Type the <strong>dark word</strong> below to open the gate.
-The faint shapes are for the machines; your eyes are supposed to ignore them.</p>
+<p>Type the <strong>word</strong> below to open the gate.</p>
 {{end}}
 {{if .Note}}<p class="bad">{{.Note}}</p>{{end}}
 <form method="post" action="solve">
 <input type="hidden" name="d" value="{{.Token}}">
 <input type="hidden" name="r" value="{{.R}}">
-<img class="challenge" src="c.png?d={{.Token}}" width="480" height="150" alt="captcha challenge image">
+<img class="challenge" src="c.png?d={{.Token}}" width="480" height="{{if eq .Kind "rank"}}240{{else}}150{{end}}" alt="captcha challenge image">
 <input type="text" name="a" autocomplete="off" autocapitalize="none" autocorrect="off"
- spellcheck="false" placeholder="{{if .Illusion}}l or r{{else}}the dark word{{end}}" required autofocus>
+ spellcheck="false" placeholder="{{if eq .Kind "illusion"}}l or r{{else if eq .Kind "rank"}}four words, most visible first{{else}}the word{{end}}" required autofocus>
 <button type="submit">Pass</button>
 </form>
 {{if .Mail}}<p class="note">Locked out of something you own? Write to {{.Mail}}.</p>{{end}}
@@ -222,6 +229,29 @@ The gate is shut for a while. Come back later - or from somewhere else.</p>
 {{if .Mail}}<p class="note">If this is your house, write to {{.Mail}}.</p>{{end}}
 </main></body></html>`
 
+// normalizeAnswer lowercases, trims and collapses separators, so both
+// "a b c d" and "a, b, c, d" compare equal.
+func kindName(k byte) string {
+	switch k {
+	case KindIllusion:
+		return "illusion"
+	case KindRank:
+		return "rank"
+	default:
+		return "word"
+	}
+}
+
+func normalizeAnswer(raw string) string {
+	return strings.Join(strings.FieldsFunc(strings.ToLower(raw), func(r rune) bool {
+		switch r {
+		case ',', ';', '.', '|', '/', '\n', '\t', ' ':
+			return true
+		}
+		return false
+	}), " ")
+}
+
 func serveChallenge(w http.ResponseWriter, a *App, route, note string, fail bool) {
 	kind, _, token, err := a.NewChallenge()
 	if err != nil {
@@ -229,13 +259,13 @@ func serveChallenge(w http.ResponseWriter, a *App, route, note string, fail bool
 		return
 	}
 	d := pageData{
-		Title:    a.Title,
-		Note:     note,
-		Token:    token,
-		Illusion: kind == KindIllusion,
-		R:        route,
-		Mail:     a.Mail,
-		Fail:     fail,
+		Title: a.Title,
+		Note:  note,
+		Token: token,
+		Kind:  kindName(kind),
+		R:     route,
+		Mail:  a.Mail,
+		Fail:  fail,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
