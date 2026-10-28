@@ -65,9 +65,9 @@ func TestFullFlow(t *testing.T) {
 	if err := e.ServeHTTP(rec, r, nil); err != nil {
 		t.Fatal(err)
 	}
-	if rec.Code != http.StatusOK ||
-		(!strings.Contains(rec.Body.String(), "not the word") &&
-			!strings.Contains(rec.Body.String(), "LOOKS longer")) {
+	// kind rotates per challenge, so only assert that a fresh challenge page
+	// comes back with a note (never a pass)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `class="bad"`) {
 		t.Fatalf("wrong-answer flow: code %d", rec.Code)
 	}
 
