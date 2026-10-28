@@ -42,11 +42,13 @@ type App struct {
 	UABinding    *bool          `json:"ua_binding,omitempty"`        // bind pass to UA+Accept-Language (default true)
 	Secure       *bool          `json:"secure_cookies,omitempty"`
 	CookieName   string         `json:"cookie_name,omitempty"` // default "tsnp_pass"
+	ScoreLog     string         `json:"score_log,omitempty"`   // shadow JSONL path ("" = journal only)
 	Title        string         `json:"title,omitempty"`
 	Mail         string         `json:"mail,omitempty"`
 
 	aesKey, hmacKey []byte
 	store           *failStore
+	scorer          *scoreSink
 }
 
 func (App) CaddyModule() caddy.ModuleInfo {
@@ -103,6 +105,9 @@ func (a *App) provision() error {
 		a.Title = "Verifying that you're human"
 	}
 	a.store = newFailStore(a.MaxFails, time.Duration(a.FailWindow), time.Duration(a.BlockTTL))
+	if a.ScoreLog != "" {
+		a.scorer = newScoreSink(a.ScoreLog)
+	}
 	return nil
 }
 

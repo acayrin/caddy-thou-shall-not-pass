@@ -120,18 +120,23 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 			return nil
 		}
 		d := r.FormValue("d")
-		// behavioural score: shadow mode only (logged, never enforced)
-		if e.log != nil {
-			if p, ok := decodeFeats(r.FormValue("f")); ok {
-				e.log.Info("tsnp behaviour",
-					zap.String("token", tokenTag(p.Token)),
-					zap.Float64("score", score(p.F)),
-					zap.Int("moves", p.F.NMoves),
-					zap.Float64("path_eff", p.F.PathEff),
-					zap.Bool("webdriver", p.F.Webdriver))
-			} else {
-				e.log.Info("tsnp behaviour", zap.String("token", tokenTag(d)), zap.String("payload", "none"))
+		// behavioural score: shadow mode only (recorded, never enforced)
+		rec := scoreRecord{TS: time.Now().Unix(), Token: tokenTag(d), Kind: "none"}
+		if p, ok := decodeFeats(r.FormValue("f")); ok {
+			rec = scoreRecord{
+				TS: time.Now().Unix(), Token: tokenTag(p.Token),
+				Score: score(p.F), Kind: "payload", Payload: true,
+				Moves: p.F.NMoves, PathEff: p.F.PathEff,
+				VPeak: p.F.VPeak, WD: p.F.Webdriver, Page: p.F.DwellPage,
 			}
+		} else {
+			rec.Score = neutralScore
+		}
+		if a.scorer != nil {
+			a.scorer.write(rec)
+		} else if e.log != nil {
+			e.log.Warn("tsnp behaviour (no score_log configured)",
+				zap.String("token", rec.Token), zap.Float64("score", rec.Score))
 		}
 		answer := normalizeAnswer(r.FormValue("a"))
 		kind, expected, _, valid := a.OpenChallenge(d)

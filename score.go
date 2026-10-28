@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"math"
+	"os"
+	"sync"
 )
 
 // Behavioural features collected on the challenge page (see web/app.js).
@@ -175,4 +177,50 @@ func score(f feats) float64 {
 func tokenTag(tok string) string {
 	sum := sha256.Sum256([]byte(tok))
 	return hex.EncodeToString(sum[:4])
+}
+
+// scoreSink appends shadow records to a JSONL file. The frontyard caddy only
+// emits error-level runtime logs, so the journal is not a usable sink there.
+type scoreSink struct {
+	mu   sync.Mutex
+	path string
+}
+
+const scoreLogMax = 64 << 20 // stop growing past 64 MB; calibration data is plenty
+
+func newScoreSink(path string) *scoreSink { return &scoreSink{path: path} }
+
+type scoreRecord struct {
+	TS      int64   `json:"ts"`
+	Token   string  `json:"token"`
+	Score   float64 `json:"score"`
+	Kind    string  `json:"kind"`
+	Moves   int     `json:"moves"`
+	PathEff float64 `json:"path_eff"`
+	VPeak   float64 `json:"v_peak"`
+	WD      bool    `json:"webdriver"`
+	Page    float64 `json:"dwell_ms"`
+	Payload bool    `json:"payload"`
+}
+
+func (s *scoreSink) write(rec scoreRecord) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if fi, err := os.Stat(s.path); err == nil && fi.Size() > scoreLogMax {
+		return
+	}
+	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	b, err := json.Marshal(rec)
+	if err != nil {
+		return
+	}
+	b = append(b, '\n')
+	_, _ = f.Write(b)
 }

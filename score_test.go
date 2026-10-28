@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -102,5 +104,25 @@ func TestAppJSAndPageWiring(t *testing.T) {
 	}
 	if strings.Contains(blockHTML, "app.js") {
 		t.Fatal("block page must not load the collector")
+	}
+}
+
+func TestScoreSink(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "shadow.jsonl")
+	s := newScoreSink(path)
+	s.write(scoreRecord{TS: 1, Token: "abc12345", Score: 0.87, Kind: "payload", Payload: true})
+	s.write(scoreRecord{TS: 2, Token: "def67890", Score: 0.5, Kind: "none"})
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 records, got %d", len(lines))
+	}
+	if !strings.Contains(lines[0], `"token":"abc12345"`) || !strings.Contains(lines[1], `"kind":"none"`) {
+		t.Fatalf("unexpected records: %q", lines)
 	}
 }
