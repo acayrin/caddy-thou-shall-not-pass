@@ -70,6 +70,8 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 			png = RenderIllusion(seed)
 		case KindRank:
 			png = RenderRank(seed)
+		case KindMoral:
+			png = RenderMoral(seed)
 		default:
 			png = Render(seed, answer, a.Decoys)
 		}
@@ -121,6 +123,8 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 				note = "Nope - answer with the side that LOOKS longer: l or r."
 			case KindRank:
 				note = "Nope - four words, most visible first. Or skip this challenge."
+			case KindMoral:
+				note = "Nope - type the letter of the branch with the animals."
 			}
 			serveChallenge(w, a, route, note, true)
 		default:
@@ -200,6 +204,9 @@ const challengeHTML = `<!doctype html>
 They are exactly the same length - trust your eyes, not a ruler.</p>
 {{else if eq .Kind "rank"}}
 <p>Type the four words in order, <strong>most visible first</strong>.</p>
+{{else if eq .Kind "moral"}}
+<p>The trolley is running down the line. Which branch would you divert it onto?
+Type the letter of the branch holding <strong>the animals</strong>.</p>
 {{else}}
 <p>Type the <strong>word</strong> below to open the gate.</p>
 {{end}}
@@ -207,9 +214,9 @@ They are exactly the same length - trust your eyes, not a ruler.</p>
 <form method="post" action="solve">
 <input type="hidden" name="d" value="{{.Token}}">
 <input type="hidden" name="r" value="{{.R}}">
-<img class="challenge" src="c.png?d={{.Token}}" width="480" height="{{if eq .Kind "rank"}}240{{else}}150{{end}}" alt="captcha challenge image">
+<img class="challenge" src="c.png?d={{.Token}}" width="480" height="{{if eq .Kind "rank"}}240{{else if eq .Kind "moral"}}170{{else}}150{{end}}" alt="captcha challenge image">
 <input type="text" name="a" autocomplete="off" autocapitalize="none" autocorrect="off"
- spellcheck="false" placeholder="{{if eq .Kind "illusion"}}l or r{{else if eq .Kind "rank"}}four words, most visible first{{else}}the word{{end}}" required autofocus>
+ spellcheck="false" placeholder="{{if eq .Kind "illusion"}}l or r{{else if eq .Kind "rank"}}four words, most visible first{{else if eq .Kind "moral"}}a or b{{else}}the word{{end}}" required autofocus>
 <button type="submit">Pass</button>
 </form>
 <p class="note"><a href="?r={{.R}}">get a different challenge</a></p>
@@ -237,6 +244,8 @@ func kindName(k byte) string {
 		return "illusion"
 	case KindRank:
 		return "rank"
+	case KindMoral:
+		return "moral"
 	default:
 		return "word"
 	}

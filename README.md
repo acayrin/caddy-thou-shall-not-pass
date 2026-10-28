@@ -19,12 +19,18 @@ Three challenge types rotate randomly per challenge (50% word, 35% rank,
    render style does not transfer. OCR pipelines die on the overlap; VLMs read
    the decoys too but must still pick the dark one.
 2. **Rank (stall type)**: four different words, order them most->least
-   visible. Two sub-variants rotate: graded background panels, and equal-luma
-   colours (which defeat pixel-luma measurement). This is not
+   visible. Only the graded-background-panel sub-variant remains (graded ink
+   was pure grey-diff and the colour variant had a hardcodable hue order). This is not
    meant to be a hard gate - a human who cannot rank simply reloads for a
    fresh challenge (the page offers a "get a different challenge" link). Its
    job is to make text pipelines fail and to waste solver time: the words
    must be OCR'd, then ordered, and the ordering is 24-way.
+
+4. **Trolley (quirkie)**: a split-track scene; divert the trolley away from
+   the animals and into this server. The answer letter is randomised per
+   image so it cannot be hardcoded. Flavour, not a discriminator: the 2026
+   trolley study found no LLM ever refused, so a model passes if asked to
+   answer like a human.
 
 3. **Müller-Lyer illusion**: two exactly equal vertical lines, one with
    outward fins (perceived longer by humans) and one with inward fins. The

@@ -40,10 +40,10 @@ type rankScene struct {
 // the token (answer) and the renderer use it, so they cannot disagree.
 func rankSceneFor(seed uint64) rankScene {
 	rng := mrand.New(mrand.NewSource(int64(seed)))
-	// variant 1: graded background panels, 2: equal-luma colours.
-	// (the former "graded ink" variant was removed: it is pure grey-diff,
-	// readable by any model and by a five-line script)
-	sc := rankScene{variant: 1 + rng.Intn(2), bg: 246}
+	// Only the graded-background-panel variant remains: graded ink was pure
+	// grey-diff (model/script readable) and equal-luma colour had a constant
+	// hue ordering that any informed solver could hardcode.
+	sc := rankScene{variant: 1, bg: 246}
 
 	seen := map[string]bool{}
 	for i := 0; i < 4; i++ {
@@ -75,11 +75,6 @@ func rankSceneFor(seed uint64) rankScene {
 			}
 			return d
 		})
-	case 2: // equal luma, different hue
-		sc.bg = 24
-		sc.inks = rankColors(rng)
-		sc.order = []int{0, 1, 2, 3}
-		sortByDesc(sc.order, func(i int) float64 { return float64(colorBrightnessRank(sc.inks[i])) })
 	}
 	return sc
 }
@@ -100,67 +95,6 @@ func (s rankScene) answer() string {
 		out[i] = s.words[idx]
 	}
 	return strings.Join(out, " ")
-}
-
-// ---- colours ----
-
-// colorBrightnessRank encodes the Helmholtz-Kohlrausch hypothesis used as the
-// answer key: at equal luma, saturated reds/magentas look brighter than greens
-// and blues.
-func colorBrightnessRank(c color.NRGBA) int {
-	switch {
-	case c.R > 140 && c.G < 140 && c.B < 140:
-		return 3 // red-orange
-	case c.R > 140 && c.B > 110:
-		return 2 // magenta
-	case c.G > 110:
-		return 1 // green
-	default:
-		return 0 // blue
-	}
-}
-
-func equalLuma(hue color.NRGBA, target float64) (color.NRGBA, bool) {
-	base := lumaOf(hue)
-	if target > base && base < 255 {
-		t := (target - base) / (255 - base)
-		if t <= 1 {
-			return color.NRGBA{
-				R: ch(int(float64(hue.R) + t*(255-float64(hue.R)))),
-				G: ch(int(float64(hue.G) + t*(255-float64(hue.G)))),
-				B: ch(int(float64(hue.B) + t*(255-float64(hue.B)))),
-				A: 255,
-			}, true
-		}
-	}
-	if target <= base && base > 0 {
-		k := target / base
-		return color.NRGBA{R: ch(int(float64(hue.R) * k)), G: ch(int(float64(hue.G) * k)), B: ch(int(float64(hue.B) * k)), A: 255}, true
-	}
-	return color.NRGBA{}, false
-}
-
-func lumaOf(c color.NRGBA) float64 {
-	return 0.2126*float64(c.R) + 0.7152*float64(c.G) + 0.0722*float64(c.B)
-}
-
-func rankColors(rng *mrand.Rand) []color.NRGBA {
-	hues := []color.NRGBA{
-		{R: 255, G: 60, B: 0, A: 255},  // red-orange
-		{R: 40, G: 230, B: 40, A: 255}, // green
-		{R: 0, G: 110, B: 255, A: 255}, // blue
-		{R: 230, G: 0, B: 210, A: 255}, // magenta
-	}
-	cols := make([]color.NRGBA, 4)
-	for i, h := range hues {
-		c, ok := equalLuma(h, 115)
-		if !ok {
-			c = h
-		}
-		cols[i] = c
-	}
-	rng.Shuffle(4, func(i, j int) { cols[i], cols[j] = cols[j], cols[i] })
-	return cols
 }
 
 // ---- renderer ----

@@ -40,8 +40,8 @@ func TestRankVariantsRotate(t *testing.T) {
 	for seed := uint64(0); seed < 200; seed++ {
 		seen[rankSceneFor(seed).variant] = true
 	}
-	if len(seen) != 2 {
-		t.Fatalf("expected 2 rank variants, saw %v", seen)
+	if len(seen) != 1 || !seen[1] {
+		t.Fatalf("expected only the panel variant, saw %v", seen)
 	}
 }
 

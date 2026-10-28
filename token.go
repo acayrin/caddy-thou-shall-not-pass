@@ -37,6 +37,7 @@ const (
 	KindWord     = 'w' // answer: the word
 	KindIllusion = 'i' // answer: "l" or "r" (Muller-Lyer perceived-longer side)
 	KindRank     = 'r' // answer: four words, most -> least visible
+	KindMoral    = 'm' // answer: branch holding the animals ("a"/"b")
 )
 
 // NewChallenge returns (kind, answer, token). Kind rotates randomly per
@@ -50,14 +51,17 @@ func (a *App) NewChallenge() (kind byte, answer, token string, err error) {
 	// the render seed comes from the nonce, so the illusion side (and with it
 	// the sealed answer) must be derived from the same seed the renderer uses
 	switch roll := mrand.Intn(100); {
-	case roll < 50:
+	case roll < 45:
 		kind, answer = KindWord, pickWord()
-	case roll < 85:
+	case roll < 70:
 		kind = KindRank
 		answer = rankSceneFor(nonceSeed(nonce)).answer()
-	default:
+	case roll < 85:
 		kind = KindIllusion
 		answer = IllusionAnswer(nonceSeed(nonce))
+	default:
+		kind = KindMoral
+		answer = moralSceneFor(nonceSeed(nonce)).answer()
 	}
 	exp := uint64(time.Now().Add(time.Duration(a.ChallengeTTL)).Unix())
 	pt := make([]byte, 9, 9+len(answer))
@@ -92,7 +96,9 @@ func (a *App) OpenChallenge(token string) (kind byte, answer string, seed uint64
 		return 0, "", 0, false
 	}
 	kind = pt[8]
-	if kind != KindWord && kind != KindIllusion && kind != KindRank {
+	switch kind {
+	case KindWord, KindIllusion, KindRank, KindMoral:
+	default:
 		return 0, "", 0, false
 	}
 	return kind, string(pt[9:]), nonceSeed(blob[:12]), true
