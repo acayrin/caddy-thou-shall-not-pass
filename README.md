@@ -37,7 +37,7 @@ Three challenge types rotate randomly (55% word, 20% illusion, 25% trolley):
   byte-reproducible without server storage. Serve it with `no-store` and
   never let anything recompress it - re-encoding destroys the ghost layer.
 - Correct solve ⇒ a stateless HMAC pass cookie with a bounded request budget
-  (default 50 accesses / 30 min), optionally bound to UA + Accept-Language
+  (default 1000 accesses / 30 min), optionally bound to UA + Accept-Language
   (not IP, to survive rotating proxy exits). The gate re-issues the cookie
   with `used+1` on every request; when the budget runs out the client is
   re-challenged. This rotation is what makes the captcha *scale* attacker
@@ -60,7 +60,7 @@ Global options (exactly one per runtime; also the source of defaults):
     tsnp {
         secret_env TSNP_SECRET   # or `secret` (env recommended)
         decoys 5                 # ghost words per image
-        accesses_per_pass 50     # requests allowed per solved challenge
+        accesses_per_pass 1000   # requests allowed per solved challenge
         pass_ttl 30m
         challenge_ttl 60s
         max_fails 25             # wrong answers per subnet before block

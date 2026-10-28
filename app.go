@@ -33,7 +33,7 @@ type App struct {
 	SecretEnv string `json:"secret_env,omitempty"`
 
 	Decoys       int            `json:"decoys,omitempty"`            // ghost words per image (default 5)
-	Accesses     int            `json:"accesses_per_pass,omitempty"` // requests per solved challenge (default 50)
+	Accesses     int            `json:"accesses_per_pass,omitempty"` // requests per solved challenge (default 1000)
 	PassTTL      caddy.Duration `json:"pass_ttl,omitempty"`          // default 30m
 	ChallengeTTL caddy.Duration `json:"challenge_ttl,omitempty"`     // default 60s
 	MaxFails     int            `json:"max_fails,omitempty"`         // default 25
@@ -71,7 +71,7 @@ func (a *App) provision() error {
 		a.Decoys = 12
 	}
 	if a.Accesses == 0 {
-		a.Accesses = 50
+		a.Accesses = 1000
 	}
 	if a.PassTTL == 0 {
 		a.PassTTL = caddy.Duration(30 * time.Minute)
