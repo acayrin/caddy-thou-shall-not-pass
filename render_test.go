@@ -85,14 +85,14 @@ func TestIllusionRender(t *testing.T) {
 func TestChallengeKindsRotate(t *testing.T) {
 	a := testApp(t)
 	seen := map[byte]bool{}
-	for i := 0; i < 2000 && len(seen) < 4; i++ {
+	for i := 0; i < 2000 && len(seen) < 3; i++ {
 		k, _, _, err := a.NewChallenge()
 		if err != nil {
 			t.Fatal(err)
 		}
 		seen[k] = true
 	}
-	if !seen[KindWord] || !seen[KindRank] || !seen[KindIllusion] || !seen[KindMoral] {
+	if !seen[KindWord] || !seen[KindIllusion] || !seen[KindMoral] {
 		t.Fatalf("kinds not rotating: %v", seen)
 	}
 }

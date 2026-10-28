@@ -65,10 +65,9 @@ func TestFullFlow(t *testing.T) {
 	if err := e.ServeHTTP(rec, r, nil); err != nil {
 		t.Fatal(err)
 	}
-	// kind rotates per challenge, so only assert that a fresh challenge page
-	// comes back with a note (never a pass)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `class="bad"`) {
-		t.Fatalf("wrong-answer flow: code %d", rec.Code)
+	// wrong answer now uses post/redirect/get: 303 back to the challenge page
+	if rec.Code != http.StatusSeeOther || !strings.Contains(rec.Header().Get("Location"), "bad=1") {
+		t.Fatalf("wrong-answer flow: code %d loc %q", rec.Code, rec.Header().Get("Location"))
 	}
 
 	// 4. correct answer (case-insensitive) -> 303 + pass cookie
@@ -138,5 +137,21 @@ func TestFullFlow(t *testing.T) {
 	_ = g.ServeHTTP(rec, r, &dummyNext{})
 	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "Thou shalt not pass") {
 		t.Fatalf("blocked flow: code %d", rec.Code)
+	}
+}
+
+func TestStaleGetOnSolveRedirects(t *testing.T) {
+	app := testApp(t)
+	e := &Endpoint{app: app}
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/solve?r=/some/page", nil)
+	if err := e.ServeHTTP(rec, r, nil); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("GET /solve should redirect, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, "./?r=") {
+		t.Fatalf("bad redirect %q", loc)
 	}
 }

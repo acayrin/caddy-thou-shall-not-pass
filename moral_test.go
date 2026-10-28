@@ -18,12 +18,15 @@ func TestMoralScene(t *testing.T) {
 			t.Fatalf("bad answer %q", sc.answer())
 		}
 		seen[sc.animalSide] = true
+		if sc.answer() == string(sc.animalSide) {
+			t.Fatalf("seed %d: answer equals the animals side (must be the server)", seed)
+		}
 		label := sc.branchA
 		if sc.answer() == "b" {
 			label = sc.branchB
 		}
-		if !strings.Contains(label, sc.animals) {
-			t.Fatalf("seed %d: animals %q not on the answering branch (%q/%q)", seed, sc.animals, sc.branchA, sc.branchB)
+		if !strings.Contains(label, "server") {
+			t.Fatalf("seed %d: answering branch %q is not the server", seed, label)
 		}
 		if moralSceneFor(seed).answer() != sc.answer() {
 			t.Fatalf("seed %d not deterministic", seed)
@@ -66,7 +69,7 @@ func TestMoralSolveFlow(t *testing.T) {
 		if err := e.ServeHTTP(rec, r, nil); err != nil {
 			t.Fatal(err)
 		}
-		if rec.Code != http.StatusSeeOther {
+		if rec.Code != http.StatusSeeOther || !strings.Contains(rec.Header().Get("Location"), "/") {
 			t.Fatalf("moral solve rejected: %d", rec.Code)
 		}
 		return
