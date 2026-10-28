@@ -113,7 +113,7 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 				serveBlockPage(w, a)
 				return nil
 			}
-			note := "Nope - that's not the bold word."
+			note := "Nope - that's not the dark word."
 			if kind == KindIllusion {
 				note = "Nope - answer with the side that LOOKS longer: l or r."
 			}
@@ -194,7 +194,7 @@ const challengeHTML = `<!doctype html>
 <p>Which vertical line <strong>looks longer</strong>? Type <code>l</code> or <code>r</code>.
 They are exactly the same length - trust your eyes, not a ruler.</p>
 {{else}}
-<p>Type the <strong>bold word</strong> below to open the gate.
+<p>Type the <strong>dark word</strong> below to open the gate.
 The faint shapes are for the machines; your eyes are supposed to ignore them.</p>
 {{end}}
 {{if .Note}}<p class="bad">{{.Note}}</p>{{end}}
@@ -203,7 +203,7 @@ The faint shapes are for the machines; your eyes are supposed to ignore them.</p
 <input type="hidden" name="r" value="{{.R}}">
 <img class="challenge" src="c.png?d={{.Token}}" width="480" height="150" alt="captcha challenge image">
 <input type="text" name="a" autocomplete="off" autocapitalize="none" autocorrect="off"
- spellcheck="false" placeholder="{{if .Illusion}}l or r{{else}}the bold word{{end}}" required autofocus>
+ spellcheck="false" placeholder="{{if .Illusion}}l or r{{else}}the dark word{{end}}" required autofocus>
 <button type="submit">Pass</button>
 </form>
 {{if .Mail}}<p class="note">Locked out of something you own? Write to {{.Mail}}.</p>{{end}}

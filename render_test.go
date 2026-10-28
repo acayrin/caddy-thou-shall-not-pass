@@ -2,6 +2,7 @@ package tsnp
 
 import (
 	"bytes"
+	"fmt"
 	"image/png"
 	mrand "math/rand"
 	"testing"
@@ -28,7 +29,7 @@ func TestRenderDeterminism(t *testing.T) {
 func TestGhostBand(t *testing.T) {
 	rng := mrand.New(mrand.NewSource(7))
 	for i := 0; i < 10000; i++ {
-		d := ghostDelta(rng)
+		d := ghostDelta(rng, profile{ghostMax: ghostMaxDelta})
 		abs := d
 		if abs < 0 {
 			abs = -abs
@@ -44,7 +45,7 @@ func TestGhostInvisibleOnNoise(t *testing.T) {
 	// of ghost color vs bg <= ghostMaxDelta.
 	rng := mrand.New(mrand.NewSource(11))
 	for i := 0; i < 2000; i++ {
-		c := ghostColor(rng)
+		c := ghostColor(rng, profile{ghostMax: ghostMaxDelta})
 		for _, v := range [3]int{int(c.R) - bgR, int(c.G) - bgG, int(c.B) - bgB} {
 			a := v
 			if a < 0 {
@@ -119,5 +120,18 @@ func TestIllusionAnswerMatchesRender(t *testing.T) {
 	}
 	if checked < 20 {
 		t.Fatalf("only %d illusion tokens generated", checked)
+	}
+}
+
+func TestProfileVariety(t *testing.T) {
+	facesOnce.Do(loadFonts)
+	seen := map[string]bool{}
+	for s := 0; s < 64; s++ {
+		rng := mrand.New(mrand.NewSource(int64(s)))
+		p := profileFor(rng, 5)
+		seen[fmt.Sprintf("%p|%d|%d|%d|%d", p.font, p.overlap, p.waveAmp, p.texture, p.ghostMax)] = true
+	}
+	if len(seen) < 24 {
+		t.Fatalf("render profile variety too low: %d distinct styles", len(seen))
 	}
 }

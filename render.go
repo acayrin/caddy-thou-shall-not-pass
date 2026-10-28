@@ -5,11 +5,14 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
 	mrand "math/rand"
 	"sync"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
+	"golang.org/x/image/font/gofont/gomedium"
+	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
@@ -19,34 +22,52 @@ const (
 	imgW, imgH    = 480, 150
 	bgR, bgG, bgB = 247, 246, 242
 
-	// ghost channel delta band: imperceptible on the noise floor (base noise
-	// is +/-3), yet decoded as full-strength text by OCR/VLM encoders.
+	// ghost channel delta band floor: imperceptible on the noise floor (base
+	// noise is +/-3), yet decoded as full-strength text by OCR/VLM encoders.
 	// Luminance-only (same delta on R,G,B) so ghosts read as neutral paper
 	// texture to humans instead of colored text.
-	ghostMinDelta, ghostMaxDelta = 3, 6
-
-	// glyph advance as a percentage of the full advance width. 78% overlaps
-	// neighbouring glyphs enough to break naive character segmentation while
-	// staying comfortably readable for humans.
-	advancePct = 78
+	ghostMinDelta, ghostMaxDelta = 3, 8
 )
+
+// profile is the per-challenge render style. Every challenge picks its own
+// combination (font, glyph overlap, baseline wave, texture) so a solver
+// trained or tuned on one render style does not transfer to the next; the
+// true word and the decoys always share the same style, so style never leaks
+// which word is real.
+type profile struct {
+	font     *opentype.Font
+	overlap  int // glyph advance, percent of full width (68..88)
+	jitter   int // baseline jitter, px (+/-)
+	waveAmp  int // baseline wave amplitude, px (0..9)
+	waveLen  int // baseline wave wavelength, px (30..70)
+	decoys   int
+	ghostMax int // decoy luminance delta cap (5..8)
+	texture  int // 0: pixel noise, 1: + horizontal streaks, 2: + diagonal
+}
 
 var (
 	facesOnce sync.Once
-	sansReg   *opentype.Font
-	sansBold  *opentype.Font
-	sansErr   error
+	fonts     []*opentype.Font
+	fontsErr  error
 )
 
 func loadFonts() {
-	sansReg, sansErr = opentype.Parse(goregular.TTF)
-	b, err := opentype.Parse(gobold.TTF)
-	if err == nil {
-		sansBold = b
+	ttfs := [][]byte{goregular.TTF, gobold.TTF, gomedium.TTF, gomono.TTF}
+	for _, raw := range ttfs {
+		f, err := opentype.Parse(raw)
+		if err != nil {
+			fontsErr = err
+			continue
+		}
+		fonts = append(fonts, f)
 	}
-	if sansErr == nil && sansBold == nil {
-		sansBold = sansReg
+}
+
+func fontAt(i int) *opentype.Font {
+	if len(fonts) == 0 {
+		return nil
 	}
+	return fonts[i%len(fonts)]
 }
 
 func faceFor(tt *opentype.Font, size int) font.Face {
@@ -70,9 +91,29 @@ func ch(v int) uint8 {
 	return uint8(v)
 }
 
-// ghostDelta returns a luminance offset in +/-[ghostMinDelta, ghostMaxDelta].
-func ghostDelta(rng *mrand.Rand) int {
-	d := ghostMinDelta + rng.Intn(ghostMaxDelta-ghostMinDelta+1)
+func profileFor(rng *mrand.Rand, decoys int) profile {
+	p := profile{
+		font:     fontAt(rng.Intn(4)),
+		overlap:  68 + rng.Intn(21),
+		jitter:   3 + rng.Intn(6),
+		waveAmp:  rng.Intn(10),
+		waveLen:  30 + rng.Intn(41),
+		decoys:   decoys + rng.Intn(3) - 1,
+		ghostMax: 5 + rng.Intn(4),
+		texture:  rng.Intn(3),
+	}
+	if p.decoys < 1 {
+		p.decoys = 1
+	}
+	if p.waveAmp == 0 {
+		p.waveAmp = 1 // keep a hint of curvature for template confusion
+	}
+	return p
+}
+
+// ghostDelta returns a luminance offset in +/-[ghostMinDelta, p.ghostMax].
+func ghostDelta(rng *mrand.Rand, p profile) int {
+	d := ghostMinDelta + rng.Intn(p.ghostMax-ghostMinDelta+1)
 	if rng.Intn(2) == 0 {
 		d = -d
 	}
@@ -80,8 +121,8 @@ func ghostDelta(rng *mrand.Rand) int {
 }
 
 // ghostColor is luminance-only: identical delta on all channels.
-func ghostColor(rng *mrand.Rand) color.NRGBA {
-	d := ghostDelta(rng)
+func ghostColor(rng *mrand.Rand, p profile) color.NRGBA {
+	d := ghostDelta(rng, p)
 	return color.NRGBA{R: ch(bgR + d), G: ch(bgG + d), B: ch(bgB + d), A: 255}
 }
 
@@ -91,44 +132,38 @@ func lowDelta(rng *mrand.Rand, band int) color.NRGBA {
 }
 
 // Render deterministically produces the captcha PNG for (seed, word, decoys):
-// per-pixel noise underlay, N human-invisible ghost words drawn with the SAME
-// bold face, size range and overlapping-glyph treatment as the true word (so
-// stroke weight / letter shape carry no "this one is real" signal), one dark
-// true word, cut-out specks through it, then light streaks and dots on top.
-// Same seed => byte-identical PNG (served with no-store).
+// noise/texture underlay, N human-invisible ghost words, one dark true word
+// with overlapping, jittered, wave-distorted glyphs, then cut-out specks and
+// light streaks on top. Same seed => byte-identical PNG (served no-store).
 func Render(seed uint64, word string, decoys int) []byte {
 	facesOnce.Do(loadFonts)
 	rng := mrand.New(mrand.NewSource(int64(seed)))
+	p := profileFor(rng, decoys)
+
 	img := image.NewNRGBA(image.Rect(0, 0, imgW, imgH))
+	drawBackground(img, rng, p)
 
-	for y := 0; y < imgH; y++ {
-		for x := 0; x < imgW; x++ {
-			d := rng.Intn(7) - 3
-			img.SetNRGBA(x, y, color.NRGBA{R: ch(bgR + d), G: ch(bgG + d), B: ch(bgB + d), A: 255})
-		}
-	}
-
-	for i := 0; i < decoys; i++ {
+	for i := 0; i < p.decoys; i++ {
 		gw := pickWordRng(rng)
 		if gw == word {
 			continue
 		}
-		c := ghostColor(rng)
+		c := ghostColor(rng, p)
 		size := 40 + rng.Intn(24)
-		f := faceFor(sansBold, size)
+		f := faceFor(p.font, size)
 		if f == nil {
 			continue
 		}
-		total := measureOverlapped(f, gw)
+		total := measureOverlapped(f, gw, p.overlap)
 		if total > imgW-16 {
 			continue
 		}
 		x := 8 + rng.Intn(imgW-total-16+1)
 		y := size + 6 + rng.Intn(imgH-size-18)
-		drawOverlapped(img, rng, gw, f, c, x, y, 5)
+		drawOverlapped(img, rng, gw, f, c, x, y, p, size)
 	}
 
-	drawTrueWord(img, rng, word)
+	drawTrueWord(img, rng, p, word)
 
 	for i := 0; i < 10; i++ {
 		streak(img, rng)
@@ -142,6 +177,29 @@ func Render(seed uint64, word string, decoys int) []byte {
 	return buf.Bytes()
 }
 
+func drawBackground(img *image.NRGBA, rng *mrand.Rand, p profile) {
+	for y := 0; y < imgH; y++ {
+		for x := 0; x < imgW; x++ {
+			d := rng.Intn(7) - 3
+			img.SetNRGBA(x, y, color.NRGBA{R: ch(bgR + d), G: ch(bgG + d), B: ch(bgB + d), A: 255})
+		}
+	}
+	switch p.texture {
+	case 1:
+		for i := 0; i < 26; i++ {
+			y := rng.Intn(imgH)
+			c := lowDelta(rng, 5)
+			for x := rng.Intn(imgW / 3); x < imgW; x++ {
+				img.SetNRGBA(x, y, c)
+			}
+		}
+	case 2:
+		for i := 0; i < 18; i++ {
+			drawLine(img, rng.Intn(120), rng.Intn(imgH), imgW-40+rng.Intn(40), rng.Intn(imgH), lowDelta(rng, 5))
+		}
+	}
+}
+
 func drawGlyph(img *image.NRGBA, f font.Face, s string, c color.Color, x, y int) {
 	d := &font.Drawer{Dst: img, Src: image.NewUniform(c), Face: f, Dot: fixed.P(x, y)}
 	d.DrawString(s)
@@ -152,48 +210,57 @@ func measure(f font.Face, s string) int {
 	return int(d.MeasureString(s) >> 6)
 }
 
-func advance(f font.Face, ru rune) int {
+func advance(f font.Face, ru rune, overlap int) int {
 	a, _ := f.GlyphAdvance(ru)
-	return int(a>>6) * advancePct / 100
+	return int(a>>6) * overlap / 100
 }
 
-func measureOverlapped(f font.Face, s string) int {
+func measureOverlapped(f font.Face, s string, overlap int) int {
 	total := 0
 	for _, ru := range s {
-		total += advance(f, ru)
+		total += advance(f, ru, overlap)
 	}
 	return total
 }
 
-// drawOverlapped draws s glyph-by-glyph with horizontal overlap and baseline
-// jitter (jitter = max +/- y offset in px). Used for both the true word and
-// the ghost decoys - identical treatment, identical structure.
-func drawOverlapped(img *image.NRGBA, rng *mrand.Rand, s string, f font.Face, c color.Color, x, y, jitter int) {
+// wave returns the baseline offset for a glyph starting at x.
+func wave(p profile, x int) int {
+	if p.waveAmp == 0 || p.waveLen == 0 {
+		return 0
+	}
+	return int(float64(p.waveAmp) * math.Sin(2*math.Pi*float64(x)/float64(p.waveLen)))
+}
+
+// drawOverlapped draws s glyph-by-glyph with horizontal overlap, per-glyph
+// baseline jitter and a slow baseline wave. Used for the true word and every
+// decoy alike.
+func drawOverlapped(img *image.NRGBA, rng *mrand.Rand, s string, f font.Face, c color.Color, x, y int, p profile, size int) {
+	startX := x
 	for _, ru := range s {
-		drawGlyph(img, f, string(ru), c, x, y)
-		x += advance(f, ru) + rng.Intn(5) - 2
-		y += rng.Intn(2*jitter+1) - jitter
-		if y < 20 {
-			y = 20
+		drawGlyph(img, f, string(ru), c, x, y+wave(p, x-startX))
+		x += advance(f, ru, p.overlap) + rng.Intn(5) - 2
+		y += rng.Intn(2*p.jitter+1) - p.jitter
+		if y < size+4 {
+			y = size + 4
 		}
-		if y > imgH-10 {
-			y = imgH - 10
+		if y > imgH-8 {
+			y = imgH - 8
 		}
 	}
 }
 
-// drawTrueWord: 64pt bold, dark, centred-ish, with cut-out specks through the
-// glyphs (background-coloured nicks that break stroke continuity for OCR).
-func drawTrueWord(img *image.NRGBA, rng *mrand.Rand, word string) {
+// drawTrueWord: 64pt dark word, wave + overlap + jitter, then cut-out specks
+// (background-coloured nicks that break stroke continuity for OCR).
+func drawTrueWord(img *image.NRGBA, rng *mrand.Rand, p profile, word string) {
 	size := 64
 	var f font.Face
 	var total int
 	for {
-		f = faceFor(sansBold, size)
+		f = faceFor(p.font, size)
 		if f == nil {
 			return
 		}
-		total = measureOverlapped(f, word)
+		total = measureOverlapped(f, word, p.overlap)
 		if total <= imgW-24 || size <= 34 {
 			break
 		}
@@ -209,9 +276,8 @@ func drawTrueWord(img *image.NRGBA, rng *mrand.Rand, word string) {
 	}
 	y := imgH * 3 / 4
 	col := color.NRGBA{R: 30, G: 28, B: 24, A: 255}
-	drawOverlapped(img, rng, word, f, col, x, y, 6)
+	drawOverlapped(img, rng, word, f, col, x, y, p, size)
 
-	// cut-out specks: background-coloured nicks inside the word box
 	top := y - size
 	if top < 4 {
 		top = 4
@@ -261,13 +327,6 @@ func drawLine(img *image.NRGBA, x0, y0, x1, y1 int, c color.Color) {
 	}
 }
 
-func abs(v int) int {
-	if v < 0 {
-		return -v
-	}
-	return v
-}
-
 // streak draws a low-contrast random line over everything.
 func streak(img *image.NRGBA, rng *mrand.Rand) {
 	drawLine(img,
@@ -284,13 +343,7 @@ func RenderIllusion(seed uint64) []byte {
 	facesOnce.Do(loadFonts)
 	rng := mrand.New(mrand.NewSource(int64(seed)))
 	img := image.NewNRGBA(image.Rect(0, 0, imgW, imgH))
-
-	for y := 0; y < imgH; y++ {
-		for x := 0; x < imgW; x++ {
-			d := rng.Intn(7) - 3
-			img.SetNRGBA(x, y, color.NRGBA{R: ch(bgR + d), G: ch(bgG + d), B: ch(bgB + d), A: 255})
-		}
-	}
+	drawBackground(img, rng, profile{texture: 0})
 
 	cx := imgW / 2
 	top, bot := 36+rng.Intn(8), imgH-36-rng.Intn(8)
@@ -322,7 +375,7 @@ func drawMuller(img *image.NRGBA, x, top, bot int, outward bool, c color.Color, 
 	fy := 25 + rng.Intn(6)
 	drawLine(img, x, top, x, bot, c)
 	drawLine(img, x+1, top, x+1, bot, c)
-	dirTop, dirBot := -1, 1 // default outward
+	dirTop, dirBot := -1, 1
 	if !outward {
 		dirTop, dirBot = 1, -1
 	}
@@ -330,4 +383,11 @@ func drawMuller(img *image.NRGBA, x, top, bot int, outward bool, c color.Color, 
 	drawLine(img, x, top, x+fx, top+dirTop*fy, c)
 	drawLine(img, x, bot, x-fx, bot+dirBot*fy, c)
 	drawLine(img, x, bot, x+fx, bot+dirBot*fy, c)
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

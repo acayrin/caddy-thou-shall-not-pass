@@ -34,7 +34,7 @@ func (a *App) aead() (cipher.AEAD, error) {
 
 // Challenge kinds sealed in the token.
 const (
-	KindWord     = 'w' // answer: the bold word
+	KindWord     = 'w' // answer: the dark word
 	KindIllusion = 'i' // answer: "l" or "r" (Muller-Lyer perceived-longer side)
 )
 
