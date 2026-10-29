@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"sync"
+	"sync/atomic"
 )
 
 // Behavioural features collected on the challenge page (see web/app.js).
@@ -182,8 +183,11 @@ func tokenTag(tok string) string {
 // scoreSink appends shadow records to a JSONL file. The frontyard caddy only
 // emits error-level runtime logs, so the journal is not a usable sink there.
 type scoreSink struct {
-	mu   sync.Mutex
-	path string
+	mu    sync.Mutex
+	path  string
+	ch    chan []byte
+	once  sync.Once
+	drops int64
 }
 
 const scoreLogMax = 64 << 20 // stop growing past 64 MB; calibration data is plenty
@@ -203,10 +207,39 @@ type scoreRecord struct {
 	Payload bool    `json:"payload"`
 }
 
-func (s *scoreSink) write(rec scoreRecord) {
-	if s == nil {
+// enqueue hands a marshalled record to the writer goroutine. Non-blocking:
+// when the buffer is full the record is dropped (shadow data, never worth
+// slowing a response for).
+func (s *scoreSink) enqueue(b []byte) {
+	if s == nil || len(b) == 0 {
 		return
 	}
+	s.once.Do(func() {
+		s.ch = make(chan []byte, 4096)
+		go s.loop()
+	})
+	select {
+	case s.ch <- b:
+	default:
+		atomic.AddInt64(&s.drops, 1)
+	}
+}
+
+func (s *scoreSink) loop() {
+	for b := range s.ch {
+		s.writeRaw(b)
+	}
+}
+
+func (s *scoreSink) write(rec scoreRecord) {
+	b, err := json.Marshal(rec)
+	if err != nil {
+		return
+	}
+	s.enqueue(b)
+}
+
+func (s *scoreSink) writeRaw(b []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if fi, err := os.Stat(s.path); err == nil && fi.Size() > scoreLogMax {
@@ -217,10 +250,5 @@ func (s *scoreSink) write(rec scoreRecord) {
 		return
 	}
 	defer f.Close()
-	b, err := json.Marshal(rec)
-	if err != nil {
-		return
-	}
-	b = append(b, '\n')
-	_, _ = f.Write(b)
+	_, _ = f.Write(append(b, '\n'))
 }

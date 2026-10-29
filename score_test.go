@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 )
@@ -116,9 +117,18 @@ func TestScoreSink(t *testing.T) {
 	s.write(scoreRecord{TS: 1, Token: "abc12345", Score: 0.87, Kind: "payload", Payload: true})
 	s.write(scoreRecord{TS: 2, Token: "def67890", Score: 0.5, Kind: "none"})
 
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
+	var b []byte
+	for i := 0; i < 100; i++ { // sink writes asynchronously
+		if bb, err := os.ReadFile(path); err == nil && len(bb) > 0 {
+			b = bb
+			if strings.Count(string(bb), "\n") >= 2 {
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(b) == 0 {
+		t.Fatal("no records written")
 	}
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	if len(lines) != 2 {

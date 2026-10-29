@@ -114,6 +114,20 @@ irreversible 8-hex tag of the challenge token.
 No JS is served on any other page, including the block page. Missing payloads
 score neutral (0.5) and never count as evidence.
 
+## Passive scoring (global, no JS)
+
+`tsnp_passive` is a handler that can be added to every vhost (frontyard sets
+`services.caddy-ext.passiveScoring = true`, which injects it into the shared
+vhost template). It records request-level signals - sec-fetch/accept/language/
+referer/cookie presence, ALPN/TLS version, per-/24 cadence (gap + count per
+10 s), document vs asset mix, method/status/latency, path (truncated) - and
+appends a shadow record to the same sink.
+
+Asset requests are deterministically sampled 1-in-8; `/.tsnp/*` and
+`/.well-known/*` are skipped. Writes are asynchronous with a 4096-record
+buffer; records are dropped rather than slowing a response. Nothing is
+enforced.
+
 ## Endpoints
 
 ```

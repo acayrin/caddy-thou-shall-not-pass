@@ -218,11 +218,15 @@ func init() {
 	caddy.RegisterModule(App{})
 	caddy.RegisterModule(Gate{})
 	caddy.RegisterModule(Endpoint{})
+	caddy.RegisterModule(Passive{})
 	httpcaddyfile.RegisterHandlerDirective("tsnp", parseCaddyFileGate)
 	httpcaddyfile.RegisterHandlerDirective("tsnp_endpoint", parseCaddyFileEndpoint)
+	httpcaddyfile.RegisterHandlerDirective("tsnp_passive", parseCaddyFilePassive)
 	httpcaddyfile.RegisterGlobalOption(appName, ParseCaddyFileApp)
 	// gate runs before any serve directive (respond/file_server/reverse_proxy);
 	// endpoint is only ever used inside its own handle_path/route.
 	httpcaddyfile.RegisterDirectiveOrder("tsnp", "after", "header")
 	httpcaddyfile.RegisterDirectiveOrder("tsnp_endpoint", "after", "header")
+	// runs before handle/handle_path groups so it sees every request
+	httpcaddyfile.RegisterDirectiveOrder("tsnp_passive", "after", "header")
 }
