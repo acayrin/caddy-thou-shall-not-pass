@@ -116,6 +116,13 @@ score neutral (0.5) and never count as evidence.
 
 ## Passive scoring (global, no JS)
 
+**v0.8.1 note**: the per-request passive score is neutral (0.5) on purpose.
+Measured against five bot exits (Playwright, WARP, two Proton exits, five Tor
+exits) every request scored 0.67 - identical to a real browser - because the
+formula only saw header shape. The records keep the raw fields so
+session-level features (path breadth, asset ratio, cookie continuity, cadence
+CV) can be computed offline; those are what separate humans from crawlers.
+
 `tsnp_passive` is a handler that can be added to every vhost (frontyard sets
 `services.caddy-ext.passiveScoring = true`, which injects it into the shared
 vhost template). It records request-level signals - sec-fetch/accept/language/

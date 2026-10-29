@@ -3,7 +3,6 @@ package tsnp
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"math"
 	"net"
 	"net/http"
 	"strings"
@@ -166,7 +165,7 @@ func (p *Passive) record(r *http.Request, status int, took time.Duration) passiv
 		rec.TLSv = tlsName(u.Version)
 		rec.ALPN = u.NegotiatedProtocol
 	}
-	rec.Score = passiveScore(rec)
+	rec.Score = passiveNeutral
 	return rec
 }
 
@@ -189,51 +188,11 @@ func truncatePath(p string) string {
 	return p
 }
 
-// passiveScore is deliberately conservative: browser-shaped header sets and a
-// healthy doc/asset mix push it up, machine-gun cadence and header-less
-// clients push it down. Shadow only.
-func passiveScore(r passiveRecord) float64 {
-	// neutral baseline below 0: a request with no browser-ish headers at all
-	// must land clearly on the machine side
-	s := -1.2
-	if r.SecF {
-		s += 0.8
-	}
-	if r.Acc {
-		s += 0.3
-	}
-	if r.Lang {
-		s += 0.4
-	}
-	if r.Ref {
-		s += 0.2
-	}
-	if r.Ck {
-		s += 0.3
-	}
-	if r.ALPN == "h2" || r.ALPN == "http/1.1" {
-		s += 0.2
-	}
-	if r.TLSv == "1.3" {
-		s += 0.2
-	}
-	if r.Doc > 0 && r.Asset > 0 {
-		s += 0.5 // loads sub-resources like a browser
-	}
-	switch {
-	case r.N10 > 60:
-		s -= 1.5 // machine-gun rate from one /24
-	case r.N10 > 25:
-		s -= 0.6
-	}
-	if r.DT > 0 && r.DT < 20 {
-		s -= 0.4 // sub-20 ms gap between requests
-	}
-	if r.M == http.MethodHead {
-		s -= 0.2
-	}
-	return 1 / (1 + math.Exp(-s))
-}
+// The per-request passive score was retired in v0.8.1: it measured header
+// shape only (every proxy/bot exit and a real browser all landed at 0.67).
+// Records keep the raw fields so session-level features can be built offline;
+// the score field stays neutral so nothing mistakes it for signal.
+const passiveNeutral = neutralScore
 
 // statusWriter captures the status code without disturbing the body.
 type statusWriter struct {

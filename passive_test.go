@@ -30,15 +30,17 @@ func curlReq() *http.Request {
 	return r
 }
 
-func TestPassiveScoreSeparates(t *testing.T) {
+func TestPassiveRecordsAreNeutral(t *testing.T) {
 	p := &Passive{cad: newCadenceStore(100)}
-	recBrowser := p.record(browserReq(), 200, 5*time.Millisecond)
-	recCurl := p.record(curlReq(), 200, 5*time.Millisecond)
-	if recBrowser.Score < 0.65 {
-		t.Fatalf("browser-shaped request scored low: %.2f", recBrowser.Score)
-	}
-	if recCurl.Score > 0.3 {
-		t.Fatalf("header-less request scored high: %.2f", recCurl.Score)
+	for _, r := range []*http.Request{browserReq(), curlReq()} {
+		rec := p.record(r, 200, 5*time.Millisecond)
+		if rec.Score != neutralScore {
+			t.Fatalf("passive score must be neutral, got %.2f", rec.Score)
+		}
+		// raw fields are what matter now
+		if rec.Key == "" || rec.Site == "" || rec.Proto == "" {
+			t.Fatalf("missing raw fields: %+v", rec)
+		}
 	}
 }
 
