@@ -150,3 +150,22 @@ func TestScoreLogSubdirective(t *testing.T) {
 		t.Fatalf("score_log = %q", a.ScoreLog)
 	}
 }
+
+func TestUAFamily(t *testing.T) {
+	cases := map[string]string{
+		"": "none",
+		"python-requests/2.32.3": "python",
+		"curl/8.11.0": "curl",
+		"Go-http-client/2.0": "go",
+		"Mozilla/5.0 (X11; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0": "firefox",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36": "chrome",
+		"Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15": "safari",
+		"Mozilla/5.0 (compatible; Googlebot/2.1)": "bot",
+		"something/1.0": "other",
+	}
+	for ua, want := range cases {
+		if got := uaFamily(ua); got != want {
+			t.Errorf("uaFamily(%q) = %q, want %q", ua, got, want)
+		}
+	}
+}

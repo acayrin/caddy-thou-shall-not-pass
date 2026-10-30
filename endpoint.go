@@ -121,10 +121,11 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 		}
 		d := r.FormValue("d")
 		// behavioural score: shadow mode only (recorded, never enforced)
-		rec := scoreRecord{TS: time.Now().Unix(), Token: tokenTag(d), Kind: "none"}
+		rec := scoreRecord{TS: time.Now().Unix(), Key: NetKey(clientIP(r)), UA: uaFamily(r.UserAgent()), Token: tokenTag(d), Kind: "none"}
 		if p, ok := decodeFeats(r.FormValue("f")); ok {
 			rec = scoreRecord{
-				TS: time.Now().Unix(), Token: tokenTag(p.Token),
+				TS: time.Now().Unix(), Key: NetKey(clientIP(r)), UA: uaFamily(r.UserAgent()),
+				Token: tokenTag(p.Token),
 				Score: score(p.F), Kind: "payload", Payload: true,
 				Moves: p.F.NMoves, PathEff: p.F.PathEff,
 				VPeak: p.F.VPeak, WD: p.F.Webdriver, Page: p.F.DwellPage,

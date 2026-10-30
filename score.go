@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -180,6 +181,33 @@ func tokenTag(tok string) string {
 	return hex.EncodeToString(sum[:4])
 }
 
+// uaFamily buckets a User-Agent into a coarse family. Shadow data only needs
+// "scripted client vs browser", so nothing finer is recorded.
+func uaFamily(ua string) string {
+	l := strings.ToLower(ua)
+	switch {
+	case l == "":
+		return "none"
+	case strings.Contains(l, "python"), strings.Contains(l, "aiohttp"), strings.Contains(l, "httpx"):
+		return "python"
+	case strings.Contains(l, "curl"), strings.Contains(l, "wget"):
+		return "curl"
+	case strings.Contains(l, "go-http-client"):
+		return "go"
+	case strings.Contains(l, "firefox"):
+		return "firefox"
+	case strings.Contains(l, "edg/"):
+		return "edge"
+	case strings.Contains(l, "chrome"), strings.Contains(l, "chromium"):
+		return "chrome"
+	case strings.Contains(l, "safari"):
+		return "safari"
+	case strings.Contains(l, "bot"), strings.Contains(l, "crawl"), strings.Contains(l, "spider"):
+		return "bot"
+	}
+	return "other"
+}
+
 // scoreSink appends shadow records to a JSONL file. The frontyard caddy only
 // emits error-level runtime logs, so the journal is not a usable sink there.
 type scoreSink struct {
@@ -196,6 +224,8 @@ func newScoreSink(path string) *scoreSink { return &scoreSink{path: path} }
 
 type scoreRecord struct {
 	TS      int64   `json:"ts"`
+	Key     string  `json:"key"`
+	UA      string  `json:"ua"`
 	Token   string  `json:"token"`
 	Score   float64 `json:"score"`
 	Kind    string  `json:"kind"`

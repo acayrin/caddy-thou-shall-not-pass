@@ -116,6 +116,7 @@ type passiveRecord struct {
 	Src   string  `json:"src"`
 	Site  string  `json:"site"`
 	Key   string  `json:"key"`
+	UA    string  `json:"ua"`
 	M     string  `json:"m"`
 	Path  string  `json:"p"`
 	State int     `json:"s"`
@@ -146,6 +147,7 @@ func (p *Passive) record(r *http.Request, status int, took time.Duration) passiv
 		Src:   "passive",
 		Site:  r.Host,
 		Key:   key,
+		UA:    uaFamily(r.UserAgent()),
 		M:     r.Method,
 		Path:  truncatePath(r.URL.Path),
 		State: status,
