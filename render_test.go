@@ -85,15 +85,17 @@ func TestIllusionRender(t *testing.T) {
 func TestChallengeKindsRotate(t *testing.T) {
 	a := testApp(t)
 	seen := map[byte]bool{}
-	for i := 0; i < 2000 && len(seen) < 3; i++ {
+	for i := 0; i < 4000 && len(seen) < 5; i++ {
 		k, _, _, err := a.NewChallenge()
 		if err != nil {
 			t.Fatal(err)
 		}
 		seen[k] = true
 	}
-	if !seen[KindWord] || !seen[KindIllusion] || !seen[KindMoral] {
-		t.Fatalf("kinds not rotating: %v", seen)
+	for _, k := range []byte{KindWord, KindIllusion, KindMoral, KindMath, KindCount} {
+		if !seen[k] {
+			t.Fatalf("kind %c never generated: %v", k, seen)
+		}
 	}
 }
 
@@ -133,5 +135,17 @@ func TestProfileVariety(t *testing.T) {
 	}
 	if len(seen) < 24 {
 		t.Fatalf("render profile variety too low: %d distinct styles", len(seen))
+	}
+}
+
+// checkSize asserts a rendered challenge is a decodable 480x150 PNG.
+func checkSize(t *testing.T, b []byte) {
+	t.Helper()
+	img, err := png.Decode(bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("png decode: %v", err)
+	}
+	if bb := img.Bounds(); bb.Dx() != imgW || bb.Dy() != imgH {
+		t.Fatalf("unexpected size %v", bb)
 	}
 }

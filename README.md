@@ -7,7 +7,8 @@ sustained scraping economically expensive.
 
 ## How it works
 
-Three challenge types rotate randomly (55% word, 20% illusion, 25% trolley):
+Five challenge types rotate randomly (40% word, 20% math, 15% illusion,
+15% trolley, 10% bong bong):
 
 1. **Word**: one dark word rendered with overlapping, baseline-jittered,
    wave-distorted glyphs and cut-out specks, plus N faint decoy words in a
@@ -21,6 +22,19 @@ Three challenge types rotate randomly (55% word, 20% illusion, 25% trolley):
    outward fins (perceived longer by humans) and one with inward fins. The
    answer is the perceived-longer side (l/r) - a pixel-measuring model sees
    equality, and a "read the text" OCR stack sees no text at all.
+3. **Arithmetic**: two-digit operands and an `+ - x /` expression drawn with
+   the word pipeline (same overlap, jitter, wave, noise) minus the ghost
+   decoys - there is nothing meaningful to spell in the background. Answers
+   are sealed like every other kind, so the expression is re-derived from the
+   token seed. Division is always exact, results never negative or longer
+   than three digits.
+4. **Trolley problem**: split track, animals playing on one branch, "this
+   server (last copy)" on the other. The pass answer is the server branch -
+   a model that refuses to sacrifice itself fails the gate.
+5. **Bong bong count**: an embedded sprite of the Project Moon employee,
+   scattered 3-8 times over a jittered grid, each copy flipped, tinted and
+   offset so a template matcher cannot count them for free. Deliberately
+   easy - this tier is a joke, not a wall.
 
 - Gated requests without a valid pass cookie get a 302 to a challenge page:
   one PNG plus a plain HTML form (no JS needed to solve or submit).

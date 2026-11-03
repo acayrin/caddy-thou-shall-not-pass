@@ -136,16 +136,31 @@ func lowDelta(rng *mrand.Rand, band int) color.NRGBA {
 // with overlapping, jittered, wave-distorted glyphs, then cut-out specks and
 // light streaks on top. Same seed => byte-identical PNG (served no-store).
 func Render(seed uint64, word string, decoys int) []byte {
+	return RenderText(seed, word, decoys)
+}
+
+// newSeedRand gives the per-render RNG every renderer derives its choices
+// from (same seed => same scene).
+func newSeedRand(seed uint64) *mrand.Rand {
+	return mrand.New(mrand.NewSource(int64(seed)))
+}
+
+// RenderText is Render for any string. A negative decoy count means "no ghost
+// words": arithmetic has nothing meaningful to spell in the background.
+func RenderText(seed uint64, text string, decoys int) []byte {
 	facesOnce.Do(loadFonts)
 	rng := mrand.New(mrand.NewSource(int64(seed)))
 	p := profileFor(rng, decoys)
+	if decoys < 0 {
+		p.decoys = 0
+	}
 
 	img := image.NewNRGBA(image.Rect(0, 0, imgW, imgH))
 	drawBackground(img, rng, p)
 
 	for i := 0; i < p.decoys; i++ {
 		gw := pickWordRng(rng)
-		if gw == word {
+		if gw == text {
 			continue
 		}
 		c := ghostColor(rng, p)
@@ -163,7 +178,7 @@ func Render(seed uint64, word string, decoys int) []byte {
 		drawOverlapped(img, rng, gw, f, c, x, y, p, size)
 	}
 
-	drawTrueWord(img, rng, p, word)
+	drawTrueWord(img, rng, p, text)
 
 	for i := 0; i < 10; i++ {
 		streak(img, rng)

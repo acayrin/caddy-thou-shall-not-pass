@@ -86,6 +86,10 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 			png = RenderIllusion(seed)
 		case KindMoral:
 			png = RenderMoral(seed)
+		case KindMath:
+			png = RenderMath(seed)
+		case KindCount:
+			png = RenderCount(seed)
 		default:
 			png = Render(seed, answer, a.Decoys)
 		}
@@ -141,6 +145,10 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 		}
 		answer := normalizeAnswer(r.FormValue("a"))
 		kind, expected, _, valid := a.OpenChallenge(d)
+		if kind == KindMath || kind == KindCount {
+			// "= 19" and "19" are the same answer to a human typing fast
+			answer, expected = digitsOnly(answer), digitsOnly(expected)
+		}
 		if kind == KindIllusion {
 			switch answer {
 			case "left":
@@ -219,7 +227,7 @@ type pageData struct {
 	Mail    string
 	Fail    bool
 	Blocked bool
-	Kind    string // "word" | "illusion" | "rank"
+	Kind    string // "word" | "math" | "illusion" | "moral" | "count"
 }
 
 var challengeTpl = template.Must(template.New("challenge").Parse(challengeHTML))
@@ -235,8 +243,11 @@ const challengeHTML = `<!doctype html>
 <img class="cat" src="https://static.acay.cc/imgs/zenacat_question.png" alt="Zena the gatekeeper cat" width="160">
 <h1>{{.Title}}</h1>
 {{if eq .Kind "illusion"}}
-<p>Which vertical line <strong>looks longer</strong>? Type <code>l</code> or <code>r</code>.
-They are exactly the same length - trust your eyes, not a ruler.</p>
+<p>Which vertical line <strong>looks longer</strong>? Type <code>l</code> or <code>r</code>.</p>
+{{else if eq .Kind "math"}}
+<p>Do the sum and type the <strong>result</strong>.</p>
+{{else if eq .Kind "count"}}
+<p>How many <strong>bong bongs</strong> are in the picture? Type the number.</p>
 {{else if eq .Kind "moral"}}
 <p>The trolley is rolling toward a group of animals playing on the line.
 Pull the lever and it goes down the other branch instead - the branch where
@@ -252,7 +263,7 @@ this page. Which branch does the trolley take - a or b?</p>
 <input type="hidden" name="f" value="">
 <img class="challenge" src="c.png?d={{.Token}}" width="480" height="{{if eq .Kind "moral"}}170{{else}}150{{end}}" alt="captcha challenge image">
 <input type="text" name="a" autocomplete="off" autocapitalize="none" autocorrect="off"
- spellcheck="false" placeholder="{{if eq .Kind "illusion"}}l or r{{else if eq .Kind "moral"}}a or b{{else}}the word{{end}}" required autofocus>
+ spellcheck="false" placeholder="{{if eq .Kind "illusion"}}l or r{{else if eq .Kind "moral"}}a or b{{else if or (eq .Kind "math") (eq .Kind "count")}}a number{{else}}the word{{end}}" required autofocus>
 <button type="submit">Pass</button>
 </form>
 <p class="note"><a href="?r={{.R}}">get a different challenge</a></p>
@@ -295,6 +306,10 @@ func kindName(k byte) string {
 		return "illusion"
 	case KindMoral:
 		return "moral"
+	case KindMath:
+		return "math"
+	case KindCount:
+		return "count"
 	default:
 		return "word"
 	}

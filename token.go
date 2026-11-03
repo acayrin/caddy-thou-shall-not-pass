@@ -37,6 +37,8 @@ const (
 	KindWord     = 'w' // answer: the word
 	KindIllusion = 'i' // answer: "l" or "r" (Muller-Lyer perceived-longer side)
 	KindMoral    = 'm' // answer: branch holding the animals ("a"/"b")
+	KindMath     = 'a' // answer: the result of the expression
+	KindCount    = 'c' // answer: how many bong bongs are drawn
 )
 
 // NewChallenge returns (kind, answer, token). Kind rotates randomly per
@@ -47,17 +49,24 @@ func (a *App) NewChallenge() (kind byte, answer, token string, err error) {
 	if _, err = rand.Read(nonce); err != nil {
 		return 0, "", "", err
 	}
-	// the render seed comes from the nonce, so the illusion side (and with it
-	// the sealed answer) must be derived from the same seed the renderer uses
+	// the render seed comes from the nonce, so every kind that shows something
+	// in the image must derive its answer from the same seed the renderer uses
+	seed := nonceSeed(nonce)
 	switch roll := mrand.Intn(100); {
-	case roll < 55:
+	case roll < 40:
 		kind, answer = KindWord, pickWord()
+	case roll < 60:
+		kind = KindMath
+		_, answer = mathFor(seed)
 	case roll < 75:
 		kind = KindIllusion
-		answer = IllusionAnswer(nonceSeed(nonce))
-	default:
+		answer = IllusionAnswer(seed)
+	case roll < 90:
 		kind = KindMoral
-		answer = moralSceneFor(nonceSeed(nonce)).answer()
+		answer = moralSceneFor(seed).answer()
+	default:
+		kind = KindCount
+		answer = strconv.Itoa(countSceneFor(seed))
 	}
 	exp := uint64(time.Now().Add(time.Duration(a.ChallengeTTL)).Unix())
 	pt := make([]byte, 9, 9+len(answer))
@@ -93,7 +102,7 @@ func (a *App) OpenChallenge(token string) (kind byte, answer string, seed uint64
 	}
 	kind = pt[8]
 	switch kind {
-	case KindWord, KindIllusion, KindMoral:
+	case KindWord, KindIllusion, KindMoral, KindMath, KindCount:
 	default:
 		return 0, "", 0, false
 	}
