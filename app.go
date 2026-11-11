@@ -121,7 +121,7 @@ func (a *App) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	for nesting := d.Nesting(); d.NextBlock(nesting); {
 		opt := d.Val()
 		switch opt {
-		case "secret", "secret_env", "cookie_name", "score_log", "title", "mail":
+		case "secret", "secret_env", "cookie_name", "title", "mail":
 			if !d.NextArg() {
 				return d.ArgErr()
 			}
