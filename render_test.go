@@ -58,10 +58,20 @@ func TestGhostInvisibleOnNoise(t *testing.T) {
 	}
 }
 
-func TestNoSecretMeansNoKeys(t *testing.T) {
+func TestNoSecretGeneratesKeys(t *testing.T) {
 	a := &App{}
-	if err := a.provision(); err == nil {
-		t.Fatal("missing secret accepted")
+	if err := a.provision(); err != nil {
+		t.Fatalf("provision without a secret: %v", err)
+	}
+	if len(a.aesKey) == 0 || len(a.hmacKey) == 0 {
+		t.Fatal("no keys derived without a secret")
+	}
+	b := &App{}
+	if err := b.provision(); err != nil {
+		t.Fatalf("second provision: %v", err)
+	}
+	if string(a.hmacKey) == string(b.hmacKey) {
+		t.Fatal("two instances share a generated key")
 	}
 }
 

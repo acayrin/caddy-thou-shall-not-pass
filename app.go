@@ -9,8 +9,9 @@
 package tsnp
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
-	"fmt"
+	"encoding/hex"
 	"os"
 	"strconv"
 	"time"
@@ -59,7 +60,14 @@ func (a *App) provision() error {
 		secret = os.Getenv(a.SecretEnv)
 	}
 	if secret == "" {
-		return fmt.Errorf("tsnp: no secret configured (set secret or secret_env)")
+		// No key configured: sign with a random one for this process. Passes
+		// then do not survive a caddy restart, which costs a visitor one extra
+		// solve and keeps the key out of the nix store and out of sops.
+		buf := make([]byte, 32)
+		if _, err := rand.Read(buf); err != nil {
+			return err
+		}
+		secret = hex.EncodeToString(buf)
 	}
 	a.aesKey = keyDomain(secret, "aes-256-gcm")
 	a.hmacKey = keyDomain(secret, "hmac-sha256")
