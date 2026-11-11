@@ -2,7 +2,6 @@ package tsnp
 
 import (
 	"crypto/rand"
-	_ "embed"
 	"encoding/hex"
 	"html/template"
 	"net/http"
@@ -17,9 +16,6 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"go.uber.org/zap"
 )
-
-//go:embed web/app.js
-var appJS []byte
 
 // Endpoint is the `tsnp_endpoint` handler mounted under the base URL; it
 // serves the challenge page, the PNG, and the (plain HTML form, no-JS)
@@ -103,14 +99,6 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 		_ = err
 		return nil
 
-	case "/app.js":
-		h := w.Header()
-		h.Set("Content-Type", "text/javascript; charset=utf-8")
-		h.Set("Cache-Control", "public, max-age=3600")
-		h.Set("X-Content-Type-Options", "nosniff")
-		_, _ = w.Write(appJS)
-		return nil
-
 	case "/solve":
 		if r.Method != http.MethodPost {
 			// stale bookmark / in-flight page: back to a fresh challenge.
@@ -124,25 +112,6 @@ func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 			return nil
 		}
 		d := r.FormValue("d")
-		// behavioural score: shadow mode only (recorded, never enforced)
-		rec := scoreRecord{TS: time.Now().Unix(), Key: NetKey(clientIP(r)), UA: uaFamily(r.UserAgent()), Token: tokenTag(d), Kind: "none"}
-		if p, ok := decodeFeats(r.FormValue("f")); ok {
-			rec = scoreRecord{
-				TS: time.Now().Unix(), Key: NetKey(clientIP(r)), UA: uaFamily(r.UserAgent()),
-				Token: tokenTag(p.Token),
-				Score: score(p.F), Kind: "payload", Payload: true,
-				Moves: p.F.NMoves, PathEff: p.F.PathEff,
-				VPeak: p.F.VPeak, WD: p.F.Webdriver, Page: p.F.DwellPage,
-			}
-		} else {
-			rec.Score = neutralScore
-		}
-		if a.scorer != nil {
-			a.scorer.write(rec)
-		} else if e.log != nil {
-			e.log.Warn("tsnp behaviour (no score_log configured)",
-				zap.String("token", rec.Token), zap.Float64("score", rec.Score))
-		}
 		answer := normalizeAnswer(r.FormValue("a"))
 		kind, expected, _, valid := a.OpenChallenge(d)
 		if kind == KindMath || kind == KindCount {
@@ -260,7 +229,6 @@ this page. Which branch does the trolley take - a or b?</p>
 <form method="post" action="solve">
 <input type="hidden" name="d" value="{{.Token}}">
 <input type="hidden" name="r" value="{{.R}}">
-<input type="hidden" name="f" value="">
 <img class="challenge" src="c.png?d={{.Token}}" width="480" height="{{if eq .Kind "moral"}}170{{else}}150{{end}}" alt="captcha challenge image">
 <input type="text" name="a" autocomplete="off" autocapitalize="none" autocorrect="off"
  spellcheck="false" placeholder="{{if eq .Kind "illusion"}}l or r{{else if eq .Kind "moral"}}a or b{{else if or (eq .Kind "math") (eq .Kind "count")}}a number{{else}}the word{{end}}" required autofocus>
@@ -268,7 +236,7 @@ this page. Which branch does the trolley take - a or b?</p>
 </form>
 <p class="note"><a href="?r={{.R}}">get a different challenge</a></p>
 {{if .Mail}}<p class="note">in case something does break - please leave a message at {{.Mail}}</p>{{end}}
-</main><script src="app.js" defer></script></body></html>`
+</main></body></html>`
 
 const blockHTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">

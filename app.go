@@ -42,13 +42,11 @@ type App struct {
 	UABinding    *bool          `json:"ua_binding,omitempty"`        // bind pass to UA+Accept-Language (default true)
 	Secure       *bool          `json:"secure_cookies,omitempty"`
 	CookieName   string         `json:"cookie_name,omitempty"` // default "tsnp_pass"
-	ScoreLog     string         `json:"score_log,omitempty"`   // shadow JSONL path ("" = journal only)
 	Title        string         `json:"title,omitempty"`
 	Mail         string         `json:"mail,omitempty"`
 
 	aesKey, hmacKey []byte
 	store           *failStore
-	scorer          *scoreSink
 }
 
 func (App) CaddyModule() caddy.ModuleInfo {
@@ -105,9 +103,6 @@ func (a *App) provision() error {
 		a.Title = "Verifying that you're human"
 	}
 	a.store = newFailStore(a.MaxFails, time.Duration(a.FailWindow), time.Duration(a.BlockTTL))
-	if a.ScoreLog != "" {
-		a.scorer = newScoreSink(a.ScoreLog)
-	}
 	return nil
 }
 
@@ -137,8 +132,6 @@ func (a *App) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				a.SecretEnv = d.Val()
 			case "cookie_name":
 				a.CookieName = d.Val()
-			case "score_log":
-				a.ScoreLog = d.Val()
 			case "title":
 				a.Title = d.Val()
 			case "mail":
@@ -218,15 +211,11 @@ func init() {
 	caddy.RegisterModule(App{})
 	caddy.RegisterModule(Gate{})
 	caddy.RegisterModule(Endpoint{})
-	caddy.RegisterModule(Passive{})
 	httpcaddyfile.RegisterHandlerDirective("tsnp", parseCaddyFileGate)
 	httpcaddyfile.RegisterHandlerDirective("tsnp_endpoint", parseCaddyFileEndpoint)
-	httpcaddyfile.RegisterHandlerDirective("tsnp_passive", parseCaddyFilePassive)
 	httpcaddyfile.RegisterGlobalOption(appName, ParseCaddyFileApp)
 	// gate runs before any serve directive (respond/file_server/reverse_proxy);
 	// endpoint is only ever used inside its own handle_path/route.
 	httpcaddyfile.RegisterDirectiveOrder("tsnp", "after", "header")
 	httpcaddyfile.RegisterDirectiveOrder("tsnp_endpoint", "after", "header")
-	// runs before handle/handle_path groups so it sees every request
-	httpcaddyfile.RegisterDirectiveOrder("tsnp_passive", "after", "header")
 }

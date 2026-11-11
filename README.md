@@ -110,42 +110,6 @@ Non-browser clients (git smart-HTTP, webdav, APIs, ACME, feed readers)
 cannot type into a picture; exempt them with extra `not path ...` matchers
 in your `@tsnp` block.
 
-## Behavioural scoring (shadow mode, v0.7.0)
-
-The challenge page loads a small `app.js` (embedded, ~5 KB, no framework) that
-collects kinematic features while the visitor solves the image: time to first
-move, move count, path efficiency, velocity peak/p95, acceleration sign
-changes, coalesced pointer events, pressure presence, typing dwell/flight,
-edits, paste, click duration, visibility changes and page dwell. It posts them
-as a hidden `f` field with the form.
-
-The server validates the vector for physical plausibility (path efficiency
-<= 1, achievable velocities, monotone timings) and computes a 0..1 score,
-which is currently **logged only** (`tsnp behaviour` in the caddy journal).
-No identifiers, no storage, no device fingerprint; the log carries an
-irreversible 8-hex tag of the challenge token.
-
-No JS is served on any other page, including the block page. Missing payloads
-score neutral (0.5) and never count as evidence.
-
-## Passive scoring (global, no JS)
-
-**v0.8.1 note**: the per-request passive score is neutral (0.5) on purpose.
-Measured against five bot exits (Playwright, WARP, two Proton exits, five Tor
-exits) every request scored 0.67 - identical to a real browser - because the
-formula only saw header shape. The records keep the raw fields so
-session-level features (path breadth, asset ratio, cookie continuity, cadence
-CV) can be computed offline; those are what separate humans from crawlers.
-
-`tsnp_passive` is a handler that can be added to every vhost (frontyard sets
-`services.caddy-ext.passiveScoring = true`, which injects it into the shared
-vhost template). It records request-level signals - sec-fetch/accept/language/
-referer/cookie presence, ALPN/TLS version, per-/24 cadence (gap + count per
-10 s), document vs asset mix, method/status/latency, path (truncated) - and
-appends a shadow record to the same sink.
-
-Asset requests are deterministically sampled 1-in-8; `/.tsnp/*` and
-`/.well-known/*` are skipped. Writes are asynchronous with a 4096-record
 buffer; records are dropped rather than slowing a response. Nothing is
 enforced.
 
